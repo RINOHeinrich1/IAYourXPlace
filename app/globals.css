@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+
+/* Dans votre fichier CSS principal (par exemple, globals.css) */
+
+.custom-scrollbar-hide {
+  /* Pour Chrome, Safari, et Opera */
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Masquer la barre de défilement spécifiquement pour les webkit (Chrome, Safari) */
+.custom-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
