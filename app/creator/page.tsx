@@ -10,29 +10,29 @@ export default function RegisterPage() {
     const handleSignIn = () => router.push('/login');
 
     return (
-      <div
-    className="relative min-h-[120vh] w-full flex justify-center items-start bg-cover bg-center"
-    style={{
-        backgroundImage: 'url("/bgimage.png")',
-        backgroundSize: "cover",         //Fond large et long
-        backgroundPosition: "top center",
-        backgroundRepeat: "no-repeat",
-    }}
->
-    {/* Overlay sombre */}
-    <div className="absolute inset-0 z-0 bg-black/80 pointer-events-none"></div>
+        <div
+            className="relative min-h-[120vh] w-full flex justify-center items-start bg-cover bg-center"
+            style={{
+                backgroundImage: 'url("/bgimage.png")',
+                backgroundSize: "cover",         //Fond large et long
+                backgroundPosition: "top center",
+                backgroundRepeat: "no-repeat",
+            }}
+        >
+            {/* Overlay sombre */}
+            <div className="absolute inset-0 z-0 bg-black/80 pointer-events-none"></div>
 
-    {/* Box principale */}
-    <div
-        className="relative z-10 mt-10 w-[90%] max-w-[430px] h-[722px] 
+            {/* Box principale */}
+            <div
+                className="relative z-10 mt-10 w-[90%] max-w-[430px] h-[722px] 
                    rounded-[32px] flex flex-col items-center gap-6 p-8"
-        style={{
-            backgroundImage: 'url("/images/bgimageregister.png")',
-            backgroundSize: "cover",    
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-        }}
-    >
+                style={{
+                    backgroundImage: 'url("/images/bgimageregister.png")',
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    backgroundRepeat: "no-repeat",
+                }}
+            >
 
 
                 {/* LOGO */}
@@ -127,7 +127,7 @@ export default function RegisterPage() {
                         </button>
                     </div>
 
-                  
+
                 </div>
 
             </div>

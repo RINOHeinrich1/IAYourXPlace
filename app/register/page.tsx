@@ -78,7 +78,7 @@ export default function RegisterPage() {
                         <div className="flex items-center justify-center gap-2 w-full">
                             <span
                                 className=" rounded-lg text-white text-sm"
- style={{ color: 'rgba(114, 107, 107, 1)' }}
+                                style={{ color: 'rgba(114, 107, 107, 1)' }}
                             >
                                 Disposez-vous d’un compte ?
                             </span>
@@ -94,7 +94,7 @@ export default function RegisterPage() {
                         <button
                             onClick={handleBack}
                             className=" cursor-pointer rounded-lg text-white text-sm"
- style={{ color: 'rgba(114, 107, 107, 1)' }}
+                            style={{ color: 'rgba(114, 107, 107, 1)' }}
                         >
                             Revenir en arrière
                         </button>

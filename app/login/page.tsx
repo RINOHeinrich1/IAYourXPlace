@@ -7,13 +7,13 @@ import { supabase } from '../../lib/supabaseClient';
 export default function LoginPage() {
   const router = useRouter();
 
-  // États des inputs
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Soumission du formulaire
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -29,10 +29,10 @@ export default function LoginPage() {
    if (error) {
   setError(error.message);
 } else {
-  // Connexion réussie, rediriger vers le dashboard
+
   router.push('/dashboard');
 }
-  };
+  }
 
   const handleBack = () => router.back();
   const handleSignUp = () => router.push('/signup');
