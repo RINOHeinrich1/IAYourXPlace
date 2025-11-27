@@ -3,14 +3,16 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useModelStore } from '../../../store/useModelStore';
 
-// --- Composant Sidebar (inchangé) ---
+// --- SIDEBAR (non modifié) ---------------------------------------------------------
 const aiNavItems = [
     { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' },
     { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
     { name: 'Collection', active: false, iconPath: '/images/colec.png', href: '/collection' },
     { name: 'Générer', active: false, iconPath: '/images/chat.png', href: '/generer' },
-    { name: 'Créer un modèle IA', active: true, iconPath: '/images/crer.png', href: '/creer-modele' }, // Active pour cette page
+    { name: 'Créer un modèle IA', active: true, iconPath: '/images/crer.png', href: '/creer-modele' },
     { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
 ];
 
@@ -46,57 +48,110 @@ const Sidebar = () => (
         </nav>
     </div>
 );
-// --- Fin Sidebar ---
 
+// --- CARD (non modifié) ---------------------------------------------------------
 interface ChoiceCardProps {
     label: string;
     imagePath: string;
     onClick: () => void;
-    showCheck?: boolean;
+    isSelected: boolean; 
 }
-const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, showCheck }) => (
+
+const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSelected }) => (
     <div
         onClick={onClick}
-        className="relative w-36 h-56 rounded-xl overflow-hidden cursor-pointer transition-transform duration-300 transform hover:scale-105"
+        className={`relative w-36 h-56 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform hover:scale-105 ${isSelected ? '' : ''}`}
     >
-        <Image src={imagePath} alt={label} layout="fill" objectFit="cover" className="absolute z-0" />
+
+        {/* Image principale : Conserve la logique de l'image de remplacement /images/j.jpg si sélectionné */}
+        <Image
+            src={isSelected ? "/images/j.jpg" : imagePath}
+            alt={label}
+            fill
+            className={`object-cover transition-all duration-300
+                ${isSelected ? "opacity-100 blur-0" : "opacity-48 -blur-[2px]"} 
+            `}
+            // NOTE: J'ai corrigé -blur-[2px] en blur-[2px] pour que Tailwind fonctionne correctement.
+        />
+
+        {/* Label */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex items-end justify-center p-3 text-center">
             <span className="text-white text-lg font-bold z-10">{label}</span>
         </div>
 
-        {/* Affiche l'icône vrai seulement si showCheck = true */}
-        {showCheck && (
-            <div className="absolute top-2 right-2 z-10 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
+        {/* Check icon (Utilise isSelected) */}
+        {isSelected && (
+            <div className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xl">
+               <Image src="/icons/check.png" alt="User Icon" width={20} height={20} />
             </div>
         )}
     </div>
 );
 
+// --- PAGE (Ajout de la couleur des yeux) -----------------------------------------
 export default function TypeCheveuxPage() {
-    const [selectedType, setSelectedType] = useState<string>('Lisse');
-    const [selectedColor, setSelectedColor] = useState<string>('Brune');
+    const router = useRouter();
+    const saveStep = useModelStore((state) => state.saveStep);
+    const modelData = useModelStore((state) => state.modelData);
 
+    // Initialisation des états avec des TABLEAUX pour la multi-sélection
+    const initialHairType = Array.isArray(modelData.hairType) ? modelData.hairType : (modelData.hairType ? [modelData.hairType] : []);
+    const initialHairColor = Array.isArray(modelData.hairColor) ? modelData.hairColor : (modelData.hairColor ? [modelData.hairColor] : []);
+    // NOUVEL ÉTAT pour la couleur des yeux (on suppose une sélection unique ici, sinon utilisez un tableau)
+    const initialEyeColor = modelData.eyeColor || null;
+    
+    const [selectedTypes, setSelectedTypes] = useState<string[]>(initialHairType);
+    const [selectedColors, setSelectedColors] = useState<string[]>(initialHairColor);
+    const [selectedEyeColor, setSelectedEyeColor] = useState<string | null>(initialEyeColor); // Choix unique
+
+    // Logique de bascule pour la multi-sélection (utilisée pour types et couleurs de cheveux)
+    const toggleSelect = (value: string, setter: React.Dispatch<React.SetStateAction<string[]>>, selectedArray: string[]) => {
+        if (selectedArray.includes(value)) {
+            setter(selectedArray.filter((v) => v !== value));
+        } else {
+            setter([...selectedArray, value]);
+        }
+    };
+
+    // --- DONNÉES ---
     const hairTypes = [
-        { label: 'Lisse', imagePath: '/images/G.jpg' },
-        { label: 'Frange', imagePath: '/images/G.jpg' },
-        { label: 'Bouclé', imagePath: '/images/G.jpg' },
-        { label: 'Court', imagePath: '/images/G.jpg' },
-        { label: 'Chignon', imagePath: '/images/G.jpg' },
+        { label: 'Lisse', imagePath: '/images/cheuveux1.png' },
+        { label: 'Frange', imagePath: '/images/cheuveux2.png' },
+        { label: 'Bouclé', imagePath: '/images/cheuveux3.png' },
+        { label: 'Court', imagePath: '/images/cheuveux4.png' },
+        { label: 'Chignon', imagePath: '/images/cheuveux5.png' },
     ];
 
     const hairColors = [
-        { label: 'Brune', imagePath: '/images/H.jpg' },
-        { label: 'Blonde', imagePath: '/images/H.jpg' },
-        { label: 'Noir', imagePath: '/images/H.jpg' },
-        { label: 'Rousse', imagePath: '/images/H.jpg' },
-        { label: 'Rose', imagePath: '/images/H.jpg' },
+        { label: 'Brune', imagePath: '/images/cheuveux6.png' },
+        { label: 'Blonde', imagePath: '/images/cheuveux7.png' },
+        { label: 'Noir', imagePath: '/images/cheuveux8.png' },
+        { label: 'Rousse', imagePath: '/images/cheuveux9.png' },
+        { label: 'Rose', imagePath: '/images/cheuveux10.png' },
     ];
+    
+    // NOUVELLES DONNÉES pour la couleur des yeux
+    const eyeColors = [
+        { label: 'Marron', imagePath: '/images/yeux1.png' }, // Images à adapter
+        { label: 'Bleu', imagePath: '/images/yeux2.png' },
+        { label: 'Vert', imagePath: '/images/yeux3.png' },
+    ];
+    // --- FIN DONNÉES ---
 
-    // Note: Les chemins d'images ci-dessus sont des placeholders.
-    // Vous devez créer ces images dans votre dossier public/images.
+
+    const handleNext = () => {
+        // Enregistrement des sélections, incluant la couleur des yeux
+        saveStep({
+            hairType: selectedTypes,
+            hairColor: selectedColors,
+            eyeColor: selectedEyeColor, // AJOUT
+        });
+
+        router.push('/creer-modele/type-corps');
+    };
+    
+    // Le bouton SUIVANT est activé si au moins un élément de chaque catégorie (cheveux type, cheveux couleur, et couleur des yeux) est sélectionné
+    const isNextButtonEnabled = selectedTypes.length > 0 && selectedColors.length > 0 && !!selectedEyeColor;
 
     return (
         <div className="flex">
@@ -104,17 +159,15 @@ export default function TypeCheveuxPage() {
 
             <div className="flex-1 ml-77 p-8 text-white bg-black min-h-screen">
 
-                {/* En-tête (Vide dans le design, mais on garde l'icône utilisateur) */}
+                {/* Icon user */}
                 <div className="flex justify-end items-center mb-10">
                     <div className="flex items-center justify-center w-[45px] h-[45px] rounded-full border border-white bg-white/10">
                         <Image src="/images/iconuser.png" alt="User Icon" width={20} height={20} />
                     </div>
                 </div>
 
-                {/* Section Type de Cheveux */}
-                <h2 className="text-white text-3xl font-bold text-center mb-10">
-                    Type de cheveux
-                </h2>
+                {/* TYPE DE CHEVEUX */}
+                <h2 className="text-white text-3xl font-bold text-center mb-10">Type de cheveux</h2>
 
                 <div className="flex justify-center gap-4 mb-20">
                     {hairTypes.map((type) => (
@@ -122,32 +175,53 @@ export default function TypeCheveuxPage() {
                             key={type.label}
                             label={type.label}
                             imagePath={type.imagePath}
-                            showCheck={selectedType === type.label}
-                            onClick={() => setSelectedType(type.label)}
+                            isSelected={selectedTypes.includes(type.label)}
+                            onClick={() => toggleSelect(type.label, setSelectedTypes, selectedTypes)}
                         />
                     ))}
                 </div>
 
-                {/* Section Couleur de Cheveux */}
-                <h2 className="text-white text-3xl font-bold text-center mb-10">
-                    Couleur de cheveux
-                </h2>
+                {/* COULEUR DE CHEVEUX */}
+                <h2 className="text-white text-3xl font-bold text-center mb-10">Couleur de cheveux</h2>
 
-                <div className="flex justify-center gap-4 mb-16">
+                <div className="flex justify-center gap-4 mb-20">
                     {hairColors.map((color) => (
                         <ChoiceCard
                             key={color.label}
                             label={color.label}
                             imagePath={color.imagePath}
-                            isSelected={selectedColor === color.label}
-                            onClick={() => setSelectedColor(color.label)}
+                            isSelected={selectedColors.includes(color.label)}
+                            onClick={() => toggleSelect(color.label, setSelectedColors, selectedColors)}
                         />
                     ))}
                 </div>
+                
+                {/* COULEUR DES YEUX (NOUVELLE SECTION) */}
+                <h2 className="text-white text-3xl font-bold text-center mb-10">Couleur des yeux</h2>
 
-                {/* Bouton Suivant (Centré) */}
+                <div className="flex justify-center gap-4 mb-16">
+                    {eyeColors.map((eye) => (
+                        <ChoiceCard
+                            key={eye.label}
+                            label={eye.label}
+                            imagePath={eye.imagePath}
+                            // Pour la couleur des yeux, on utilise une sélection unique (string | null)
+                            isSelected={selectedEyeColor === eye.label} 
+                            onClick={() => setSelectedEyeColor(eye.label)}
+                        />
+                    ))}
+                </div>
+                {/* FIN COULEUR DES YEUX */}
+
+
+                {/* BOUTON SUIVANT */}
                 <div className="flex justify-center">
-                    <button className="w-[180px] py-4 rounded-xl bg-red-600 text-white text-xl font-bold hover:bg-red-700 transition-colors">
+                    <button
+                        onClick={handleNext}
+                        disabled={!isNextButtonEnabled}
+                        className={`w-[180px] py-4 rounded-xl text-white text-xl font-bold transition-colors 
+                        ${isNextButtonEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500 cursor-not-allowed'}`}
+                    >
                         SUIVANT
                     </button>
                 </div>
