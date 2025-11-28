@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react'; // Ajout de l'icône X
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
 
 // --- Les définitions de constantes restent inchangées ---
@@ -82,12 +82,17 @@ export default function DiscuterPage() {
     const activeChat = chatListItems.find(chat => chat.id === selectedChatId);
 
     const [messages, setMessages] = useState<Message[]>([
-        // // Message mock pour le test de la popup
-        // { role: 'user', content: "I'm fine and u?", type: 'text', time: '13:20' },
+        // Votre tableau de messages initial (vide ou avec messages de test)
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // ÉTAT POUR LA RÉPONSE
+    const [replyTo, setReplyTo] = useState<number | null>(null);
+    const clearReply = () => setReplyTo(null); // Fonction pour fermer l'aperçu
 
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(() => { scrollToBottom(); }, [messages]);
@@ -97,17 +102,25 @@ export default function DiscuterPage() {
         if (!input.trim() || isLoading) return;
 
         const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-
         const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime };
+
+        // Stocker le message de réponse pour l'historique ou l'API si nécessaire
+        const replyInfo = replyTo !== null ? { repliedToContent: messages[replyTo].content, repliedToRole: messages[replyTo].role } : {};
+
         setMessages(prev => [...prev, userMessage]);
         setInput('');
         setIsLoading(true);
+        clearReply(); // IMPORTANT: Cache l'aperçu de la réponse après l'envoi
 
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: [...messages, userMessage] }),
+                // Envoyer l'historique et le message de l'utilisateur (incluant l'info de réponse si nécessaire)
+                body: JSON.stringify({ 
+                    messages: [...messages, userMessage], 
+                    replyInfo: replyInfo 
+                }), 
             });
 
             if (!response.ok) throw new Error('Erreur API');
@@ -140,13 +153,10 @@ export default function DiscuterPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [input, messages, isLoading]);
+    }, [input, messages, isLoading, replyTo]); // Ajout de replyTo comme dépendance
 
     if (!activeChat) return null;
 
-
-    const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
-    const menuRef = useRef<HTMLDivElement>(null);
 
     const reactions = [
         { emoji: "❤️", alt: "Coeur" },
@@ -177,14 +187,13 @@ export default function DiscuterPage() {
         e.preventDefault();
         toggleMenu(index);
     };
-    
-    // NOUVEAU: Logique pour ajouter la réaction au message
+
+    // Logique pour ajouter la réaction au message
     const handleReaction = (idx: number, emoji: string) => {
         setMessages(prevMessages => {
             const newMessages = [...prevMessages];
             const currentReaction = newMessages[idx].reaction;
 
-            // Logique de bascule: si la même réaction existe, la retirer. Sinon, définir la nouvelle.
             if (currentReaction === emoji) {
                 newMessages[idx].reaction = undefined;
             } else {
@@ -196,7 +205,57 @@ export default function DiscuterPage() {
         setOpenMenuIndex(null); // Ferme le menu après la sélection
     };
 
-const [replyTo, setReplyTo] = useState<number | null>(null);
+
+    // MODIFIÉ: Composant Aperçu de Réponse (Reply Preview)
+    const ReplyPreview = () => {
+        if (replyTo === null) return null;
+
+        const repliedMessage = messages[replyTo];
+        const isMe = repliedMessage.role === 'user';
+        // Utiliser le nom du chat actif (l'autre personne) si le message est de 'assistant'
+        const repliedToName = isMe ? "vous-même" : activeChat.name;
+
+        return (
+            <div
+                // MODIFIÉ: Retrait de bg-black/50
+                className="w-full p-4 mt-6 flex justify-between items-center z-10 mx-auto"
+                style={{
+                    width: '590px', // MODIFIÉ: Largeur raccourcie
+                    height: '99px',
+                    borderTopLeftRadius: '16px',
+                    borderTopRightRadius: '16px',
+                    borderWidth: '1px',
+                 
+                    borderStyle: 'solid',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    // MODIFIÉ: Suppression du background inline
+                    boxSizing: 'border-box',
+                }}
+            >
+                <div className="flex flex-col overflow-hidden w-full h-full justify-center">
+                    {/* MODIFIÉ: Couleur du texte mise en blanc */}
+                    <span className="font-semibold text-sm text-white"> 
+                        Réponse à {repliedToName}
+                    </span>
+                    <p className="text-gray-300 text-sm whitespace-nowrap overflow-hidden text-ellipsis mt-1">
+                        {repliedMessage.content}
+                    </p>
+                </div>
+                <button 
+                    onClick={clearReply} 
+                    className="text-white hover:text-red-500 transition ml-4 flex-shrink-0 p-2 rounded-full hover:bg-white/10"
+                >
+                   <img
+    src="/icons/close.png"
+    className="w-6 h-6 cursor-pointer"
+    alt="close icon"
+/>
+
+                </button>
+            </div>
+        );
+    };
+
 
     return (
         <div className="min-h-screen bg-black text-white">
@@ -229,25 +288,24 @@ const [replyTo, setReplyTo] = useState<number | null>(null);
 
                 <div className="flex-1 bg-black p-0 flex flex-col">
 
+                    {/* Conteneur principal du chat */}
                     <div className="w-[640px] h-[524px] bg-[#0A0A0A] border border-white/20 rounded-[32px] p-5 flex flex-col justify-between relative left-5 top-27">
 
 
+                        {/* Entête du chat */}
                         <div>
                             <div className="flex items-center justify-between">
-
                                 <img
                                     src="/images/imgmes1.png"
                                     className="w-14 h-14 rounded-full object-cover"
                                     alt="profile"
                                 />
-
-
                                 <div className="flex items-center space-x-4">
-                                    <img
+                                    {/* <img
                                         src="/images/magic.png"
                                         className="h-7 rounded-full"
                                         alt="magic"
-                                    />
+                                    /> */}
                                     <button className="text-white text-xl">⋮</button>
                                     <img
                                         src="/images/vector.png"
@@ -256,174 +314,171 @@ const [replyTo, setReplyTo] = useState<number | null>(null);
                                     />
                                 </div>
                             </div>
-
                             <div className="w-159 h-px -ml-5 bg-white/20 mt-4"></div>
-
                         </div>
 
 
+                        {/* Zone des messages */}
                         <div className="flex-1 mt-4 overflow-y-auto space-y-3">
-  {messages.map((msg, idx) => {
-    const isMe = msg.role === "user";
-    const isMenuOpen = openMenuIndex === idx;
+                            {messages.map((msg, idx) => {
+                                const isMe = msg.role === "user";
+                                const isMenuOpen = openMenuIndex === idx;
 
-    return (
-      <div
-        key={idx}
-        className={`flex mb-2 ${isMe ? "justify-end" : "justify-start"}`}
-      >
-        {/* Avatar */}
-        {!isMe && (
-          <img
-            src="/images/imgmes1.png"
-            className="w-12 h-12 rounded-full object-cover mr-2"
-            alt="assistant"
-          />
-        )}
+                                return (
+                                    <div
+                                        key={idx}
+                                        className={`flex mb-2 ${isMe ? "justify-end" : "justify-start"}`}
+                                    >
+                                        {/* Avatar pour assistant */}
+                                        {!isMe && (
+                                            <img
+                                                src="/images/imgmes1.png"
+                                                className="w-12 h-12 rounded-full object-cover mr-2"
+                                                alt="assistant"
+                                            />
+                                        )}
 
-        {/* Bulle + Popup */}
-        <div className="relative max-w-[320px]">
-          <div
-            onContextMenu={(e) => handleContextMenu(e, idx)}
-            onClick={() => toggleMenu(idx)}
-            className={`px-4 py-2 rounded-2xl text-white cursor-pointer`}
-            style={{ background: isMe ? "rgba(23,23,23,1)" : "rgba(98,98,98,1)" }}
-          >
-            {msg.type === "image" ? (
-              <div className="w-40 h-40 relative">
-                <Image
-                  src="/images/mock.png"
-                  alt="Mock Image"
-                  fill
-                  className="object-cover rounded-xl"
-                />
-              </div>
-            ) : (
-              msg.content
-            )}
-          </div>
-
-          {/* Réaction visible */}
-         {/* Réaction visible en bas à droite du message */}
-{msg.reaction && (
-  <div
-    className="absolute text-xl rounded-full p-[2px] shadow-lg border-2 border-black bg-[#1b1b1b]"
-    style={{
-      bottom: '-10px', // juste en dessous de la bulle
-      right: isMe ? '0px' : 'auto',
-      left: isMe ? 'auto' : '0px',
-    }}
-  >
-    {msg.reaction}
-  </div>
-)}
-
-
-       {isMenuOpen && (
-  <div
-    ref={menuRef}
-    className="absolute z-50 rounded-xl shadow-xl p-3 w-[280px] flex flex-col"
-    style={{
-      top: "-110px",
-      left: isMe ? "auto" : "-10px",
-      right: isMe ? "-10px" : "auto",
-      background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%)",
-      backdropFilter: "blur(10px)",
-      border: "1px solid rgba(255,255,255,0.1)",
-    }}
-  >
-    {/* Réactions */}
-    <div className="flex flex-wrap justify-between mb-2 gap-1">
-      {reactions.map((r) => (
-        <div
-          key={r.emoji}
-          className={`text-2xl cursor-pointer hover:scale-125 transition ${
-            msg.reaction === r.emoji ? "bg-white/30 rounded-full p-1" : ""
-          }`}
-          onClick={() => handleReaction(idx, r.emoji)}
-        >
-          {r.emoji}
-        </div>
-      ))}
-    </div>
-
-   {/* Message sélectionné à droite avec style personnalisé */}
-<div className="w-full flex justify-end">
-  <div
-    className="text-white text-sm flex items-center"
-    style={{
-      background: "rgba(23, 23, 23, 1)",
-      width: "114px",
-      height: "26px",
-      borderRadius: "32px",
-      padding: "5px 10px",
-      gap: "10px",
-    }}
-  >
-    {msg.content}
-  </div>
-</div>
-
-
-    {/* Heure + Actions */}
+                                        {/* Bulle + Popup */}
+                                        {/* Bulle + Réaction + Popup */}
+<div className="relative max-w-[320px] flex flex-col">
     <div
-      className="flex flex-col gap-1 p-2 rounded mt-2"
-      style={{ background: "rgba(56,56,56,1)" }}
+        onContextMenu={(e) => handleContextMenu(e, idx)}
+        onClick={() => toggleMenu(idx)}
+        className={`px-4 py-2 rounded-2xl text-white cursor-pointer`}
+        style={{ background: isMe ? "rgba(23,23,23,1)" : "rgba(98,98,98,1)" }}
     >
-      {/* Heure à gauche */}
-      <div className="text-left text-white text-[10px]">
-        {msg.time}
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-col gap-1 text-sm mt-1">
-        <div
-          className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10"
-          onClick={() => setReplyTo(idx)}
-        >
-          <Reply size={16} />
-          <span>Répondre</span>
-        </div>
-        <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
-          <Share2 size={16} />
-          <span>Transférer</span>
-        </div>
-        <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
-          <Pin size={16} />
-          <span>Épingler</span>
-        </div>
-        <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
-          <Trash2 size={16} />
-          <span>Supprimer pour vous</span>
-        </div>
-        <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer text-[#e95a5a] hover:bg-white/10">
-          <Undo2 size={16} className="text-red-400" />
-          <span>Retirer</span>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-
-
-  </div>
-        {isMe && (
-          <img
-            src="/images/user.png"
-            className="w-12 h-12 rounded-full object-cover ml-2"
-            alt="me"
-          />
+        {msg.type === "image" ? (
+            <div className="w-40 h-40 relative">
+                <Image
+                    src="/images/mock.png"
+                    alt="Mock Image"
+                    fill
+                    className="object-cover rounded-xl"
+                />
+            </div>
+        ) : (
+            msg.content
         )}
-      </div>
-    );
-  })}
-  <div ref={messagesEndRef} />
-</div>
+    </div>
 
+    {/* Réaction sous le message */}
+    {msg.reaction && (
+        <div className="mt-1 text-xl">
+            {msg.reaction}
+        </div>
+    )}
+
+
+                                            {isMenuOpen && (
+                                                <div
+                                                    ref={menuRef}
+                                                    className="absolute z-50 rounded-xl shadow-xl p-3 w-[280px] flex flex-col"
+                                                    style={{
+                                                        top: "-110px",
+                                                        left: isMe ? "auto" : "-10px",
+                                                        right: isMe ? "-10px" : "auto",
+                                                        background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%)",
+                                                        backdropFilter: "blur(10px)",
+                                                        border: "1px solid rgba(255,255,255,0.1)",
+                                                    }}
+                                                >
+                                                    {/* Réactions */}
+                                                    <div className="flex flex-wrap justify-between mb-2 gap-1">
+                                                        {reactions.map((r) => (
+                                                            <div
+                                                                key={r.emoji}
+                                                                className={`text-2xl cursor-pointer hover:scale-125 transition ${
+                                                                    msg.reaction === r.emoji ? "bg-white/30 rounded-full p-1" : ""
+                                                                    }`}
+                                                                onClick={() => handleReaction(idx, r.emoji)}
+                                                            >
+                                                                {r.emoji}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    {/* Message sélectionné pour aperçu */}
+                                                    <div className="w-full flex justify-end">
+                                                        <div
+                                                            className="text-white text-sm flex items-center"
+                                                            style={{
+                                                                background: "rgba(23, 23, 23, 1)",
+                                                                width: "114px",
+                                                                height: "26px",
+                                                                borderRadius: "32px",
+                                                                padding: "5px 10px",
+                                                                gap: "10px",
+                                                            }}
+                                                        >
+                                                            {msg.content}
+                                                        </div>
+                                                    </div>
+
+
+                                                    {/* Heure + Actions */}
+                                                    <div
+                                                        className="flex flex-col gap-1 p-2 rounded mt-2"
+                                                        style={{ background: "rgba(56,56,56,1)" }}
+                                                    >
+                                                        {/* Heure à gauche */}
+                                                        <div className="text-left text-white text-[10px]">
+                                                            {msg.time}
+                                                        </div>
+
+                                                        {/* Actions */}
+                                                        <div className="flex flex-col gap-1 text-sm mt-1">
+                                                            <div
+                                                                className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10"
+                                                                onClick={() => {
+                                                                    setReplyTo(idx);
+                                                                    setOpenMenuIndex(null); // Ferme le menu après avoir cliqué sur Répondre
+                                                                }}
+                                                            >
+                                                                <Reply size={16} />
+                                                                <span>Répondre</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
+                                                                <Share2 size={16} />
+                                                                <span>Transférer</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
+                                                                <Pin size={16} />
+                                                                <span>Épingler</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
+                                                                <Trash2 size={16} />
+                                                                <span>Supprimer pour vous</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer text-[#e95a5a] hover:bg-white/10">
+                                                                <Undo2 size={16} className="text-red-400" />
+                                                                <span>Retirer</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Avatar pour user */}
+                                        {isMe && (
+                                            <img
+                                                src="/images/user.png"
+                                                className="w-12 h-12 rounded-full object-cover ml-2"
+                                                alt="me"
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            <div ref={messagesEndRef} />
+                        </div>
+
+
+                        {/* NOUVEAU: APERÇU DE LA RÉPONSE (Reply Preview) */}
+                        <ReplyPreview />
 
                         {/* Input + send */}
-                        <form onSubmit={sendMessage} className="relative flex items-center mt-4">
+                        <form onSubmit={sendMessage} className="relative flex items-center">
                             <input
                                 type="text"
                                 value={input}
