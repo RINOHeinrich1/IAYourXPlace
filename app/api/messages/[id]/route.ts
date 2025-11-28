@@ -1,15 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
-
-// Helper function to get user's profile ID from auth user
-async function getUserProfileId(userId: string): Promise<string | null> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('owner_id', userId)
-    .single();
-  return profile?.id || null;
-}
+import { createSupabaseServerClient, getUserProfileId } from '@/lib/supabaseServer';
 
 // DELETE /api/messages/[id] - Delete a specific message
 // Uses existing messages table with sender_id (profile ID)
@@ -18,6 +8,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -25,7 +16,7 @@ export async function DELETE(
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
     if (!profileId) {
       return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
     }
@@ -83,6 +74,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -90,7 +82,7 @@ export async function PATCH(
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
     if (!profileId) {
       return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
     }

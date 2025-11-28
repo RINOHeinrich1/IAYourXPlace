@@ -1,30 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
-
-// Helper function to get user's profile ID from auth user
-async function getUserProfileId(userId: string): Promise<string | null> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('owner_id', userId)
-    .single();
-  return profile?.id || null;
-}
+import { createSupabaseServerClient, getUserProfileId } from '@/lib/supabaseServer';
 
 // GET /api/conversations - Get all AI conversations for the current user
 // Uses existing conversations table with model_id for AI chats
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    console.log('[GET /api/conversations] Auth user:', user?.id || 'none', 'Error:', authError?.message || 'none');
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
+    console.log('[GET /api/conversations] User profile ID:', profileId || 'NOT FOUND');
+
     if (!profileId) {
-      return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
+      // Return empty conversations instead of 404 - profile might not exist yet
+      console.log('[GET /api/conversations] Profile not found for user:', user.id);
+      return NextResponse.json({ conversations: [] });
     }
 
     // Fetch conversations where user is sender AND there's an AI model (model_id is not null)
@@ -90,6 +87,7 @@ export async function GET(request: NextRequest) {
 // Uses existing conversations table with model_id
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -97,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
     if (!profileId) {
       return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
     }
@@ -171,6 +169,7 @@ export async function POST(request: NextRequest) {
 // Uses existing conversations table
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -178,7 +177,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
     if (!profileId) {
       return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
     }

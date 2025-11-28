@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { createSupabaseServerClient, getUserProfileId } from '@/lib/supabaseServer';
 import { GoogleGenAI } from '@google/genai';
 
 const ai = new GoogleGenAI({});
 const MODEL_NAME = "gemini-2.5-flash";
 
-// Helper function to get user's profile ID from auth user
-async function getUserProfileId(userId: string): Promise<string | null> {
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('owner_id', userId)
-    .single();
-  return profile?.id || null;
-}
-
 // GET /api/messages - Get messages for a conversation
 // Uses existing messages table
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -26,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
     if (!profileId) {
       return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
     }
@@ -96,16 +87,24 @@ export async function GET(request: NextRequest) {
 // Uses existing messages and conversations tables
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    console.log('[POST /api/messages] Auth user:', user?.id || 'none');
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
     // Get user's profile ID
-    const profileId = await getUserProfileId(user.id);
+    const profileId = await getUserProfileId(supabase, user.id);
+    console.log('[POST /api/messages] User profile ID:', profileId || 'NOT FOUND');
+
     if (!profileId) {
-      return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
+      return NextResponse.json({
+        error: 'Profil non trouvé - Veuillez créer votre profil avant de discuter',
+        user_id: user.id
+      }, { status: 404 });
     }
 
     const body = await request.json();
