@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import type { Message, Conversation, ConversationListItem } from '../types/chat';
+import type { Message, Conversation, ConversationListItem, AIModel } from '../types/chat';
 
 interface UseChatOptions {
   conversationId?: string;
@@ -13,12 +13,27 @@ export function useChat(options: UseChatOptions = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
+  const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Get the model ID (support both modelId and aiProfileId for backward compatibility)
   const effectiveModelId = options.modelId || options.aiProfileId;
+
+  // Fetch available AI models
+  const fetchModels = useCallback(async () => {
+    try {
+      const response = await fetch('/api/ai-profiles');
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error);
+
+      setAvailableModels(data.models || []);
+    } catch (err) {
+      console.error('Error fetching AI models:', err);
+    }
+  }, []);
 
   // Fetch conversations list
   const fetchConversations = useCallback(async () => {
@@ -180,17 +195,64 @@ export function useChat(options: UseChatOptions = {}) {
 
   // Select a conversation
   const selectConversation = useCallback(async (conversationId: string) => {
+    // First, try to find in local state
     const conv = conversations.find(c => c.id === conversationId);
+
     if (conv) {
+      // Cast to Conversation - the API returns compatible data
       setCurrentConversation(conv as unknown as Conversation);
+      await fetchMessages(conversationId);
+    } else {
+      // Conversation not in local state - just set minimal data and fetch messages
+      // This handles cases where conversations list is stale
+      setCurrentConversation({
+        id: conversationId,
+        created_at: new Date().toISOString(),
+      });
       await fetchMessages(conversationId);
     }
   }, [conversations, fetchMessages]);
 
+  // Start a new conversation with an AI model
+  const startConversation = useCallback(async (modelId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Create or get existing conversation
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error);
+
+      const conversation = data.conversation;
+
+      // Set as current conversation
+      setCurrentConversation(conversation as Conversation);
+      setMessages([]);
+
+      // Refresh conversation list
+      await fetchConversations();
+
+      return conversation;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la création');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchConversations]);
+
   // Initial load
   useEffect(() => {
     fetchConversations();
-  }, [fetchConversations]);
+    fetchModels();
+  }, [fetchConversations, fetchModels]);
 
   // Load messages when conversationId changes
   useEffect(() => {
@@ -203,6 +265,7 @@ export function useChat(options: UseChatOptions = {}) {
     messages,
     conversations,
     currentConversation,
+    availableModels,
     isLoading,
     isSending,
     error,
@@ -211,8 +274,10 @@ export function useChat(options: UseChatOptions = {}) {
     updateReaction,
     deleteConversation,
     selectConversation,
+    startConversation,
     fetchConversations,
     fetchMessages,
+    fetchModels,
     setCurrentConversation,
   };
 }

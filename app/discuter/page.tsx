@@ -88,12 +88,14 @@ export default function DiscuterPage() {
         messages: dbMessages,
         conversations,
         currentConversation,
+        availableModels,
         isSending,
         sendMessage: sendDbMessage,
         deleteMessage: deleteDbMessage,
         updateReaction: updateDbReaction,
         deleteConversation,
         selectConversation,
+        startConversation,
     } = useChat();
 
     // Transform DB messages to UI messages format
@@ -112,7 +114,7 @@ export default function DiscuterPage() {
         setMessages(uiMessages);
     }, [dbMessages]);
 
-    // Build chat list from conversations or use defaults
+    // Build chat list from conversations or available AI models
     // Support both ai_model and ai_profile for backward compatibility
     const chatListItems = conversations.length > 0
         ? conversations.map(conv => {
@@ -125,9 +127,20 @@ export default function DiscuterPage() {
                     ? `${conv.last_message.role === 'user' ? 'vous: ' : ''}${lastMsgContent.substring(0, 30)}...`
                     : 'Nouvelle conversation',
                 profileSrc: aiProfile?.avatar_url || '/images/imgmes1.png',
+                isConversation: true,
+                modelId: undefined as string | undefined,
             };
         })
-        : defaultChatItems;
+        : availableModels.length > 0
+            ? availableModels.map(model => ({
+                id: model.id,
+                name: model.name,
+                lastMessage: 'Démarrer une conversation',
+                profileSrc: model.avatar_url || '/images/imgmes1.png',
+                isConversation: false,
+                modelId: model.id,
+            }))
+            : defaultChatItems.map(item => ({ ...item, isConversation: false, modelId: undefined }));
 
     const [selectedChatId, setSelectedChatId] = useState<string>(chatListItems[0]?.id || '1');
     const activeChat = chatListItems.find(chat => chat.id === selectedChatId) || chatListItems[0];
@@ -145,13 +158,28 @@ export default function DiscuterPage() {
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(() => { scrollToBottom(); }, [messages]);
 
-    // Handle conversation selection
+    // Auto-select first conversation when conversations load
+    useEffect(() => {
+        if (conversations.length > 0 && !currentConversation) {
+            const firstConv = conversations[0];
+            setSelectedChatId(firstConv.id);
+            selectConversation(firstConv.id);
+        }
+    }, [conversations, currentConversation, selectConversation]);
+
+    // Handle conversation or AI model selection
     const handleSelectConversation = useCallback(async (chatId: string) => {
         setSelectedChatId(chatId);
-        if (conversations.length > 0) {
+        const selectedItem = chatListItems.find(item => item.id === chatId);
+
+        if (selectedItem?.isConversation) {
+            // Select existing conversation
             await selectConversation(chatId);
+        } else if (selectedItem?.modelId) {
+            // Start new conversation with AI model
+            await startConversation(selectedItem.modelId);
         }
-    }, [conversations, selectConversation]);
+    }, [chatListItems, selectConversation, startConversation]);
 
     const sendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -160,56 +188,21 @@ export default function DiscuterPage() {
         const replyToId = replyTo !== null && messages[replyTo]?.id ? messages[replyTo].id : undefined;
 
         clearReply();
+        const messageContent = input.trim();
         setInput('');
 
-        // Use database-backed sending if we have a conversation, otherwise use legacy API
-        // Support both model_id and ai_profile_id for backward compatibility
-        if (currentConversation?.model_id || currentConversation?.ai_profile_id || conversations.length > 0) {
-            await sendDbMessage(input.trim(), replyToId);
+        // Always use database-backed sending when we have a conversation
+        if (currentConversation?.id) {
+            await sendDbMessage(messageContent, replyToId);
         } else {
-            // Fallback to legacy API for demo purposes
+            // No conversation selected - show a message to select an AI model first
             const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-            const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime };
-
-            setMessages(prev => [...prev, userMessage]);
-
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: [...messages, userMessage] }),
-                });
-
-                if (!response.ok) throw new Error('Erreur API');
-
-                const data = await response.json();
-                const assistantMessage = data.choices?.[0]?.message;
-
-                if (assistantMessage) {
-                    const isImage = assistantMessage.content.toLowerCase().includes("image");
-                    setMessages(prev => [
-                        ...prev,
-                        {
-                            role: 'assistant',
-                            content: isImage ? "mock" : assistantMessage.content,
-                            type: isImage ? "image" : "text",
-                            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                        }
-                    ]);
-                } else {
-                    setMessages(prev => [
-                        ...prev,
-                        { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
-                    ]);
-                }
-            } catch {
-                setMessages(prev => [
-                    ...prev,
-                    { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
-                ]);
-            }
+            setMessages(prev => [
+                ...prev,
+                { role: 'assistant', content: "⚠️ Veuillez sélectionner un modèle IA dans la liste pour commencer une conversation.", type: 'text', time: currentTime }
+            ]);
         }
-    }, [input, messages, isLoading, replyTo, currentConversation, conversations, sendDbMessage]);
+    }, [input, messages, isLoading, replyTo, currentConversation, sendDbMessage]);
 
     if (!activeChat) return null;
 

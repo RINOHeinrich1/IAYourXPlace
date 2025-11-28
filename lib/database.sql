@@ -222,6 +222,36 @@ BEGIN
   END IF;
 END $$;
 
+-- Policy for inserting AI conversations
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'conversations'
+    AND policyname = 'Users can create AI conversations'
+  ) THEN
+    CREATE POLICY "Users can create AI conversations" ON public.conversations
+      FOR INSERT WITH CHECK (
+        sender_id IN (SELECT id FROM public.profiles WHERE owner_id = auth.uid())
+      );
+  END IF;
+END $$;
+
+-- Policy for deleting own AI conversations
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'conversations'
+    AND policyname = 'Users can delete their AI conversations'
+  ) THEN
+    CREATE POLICY "Users can delete their AI conversations" ON public.conversations
+      FOR DELETE USING (
+        sender_id IN (SELECT id FROM public.profiles WHERE owner_id = auth.uid())
+      );
+  END IF;
+END $$;
+
 -- Policy for messages in AI conversations
 DO $$
 BEGIN
