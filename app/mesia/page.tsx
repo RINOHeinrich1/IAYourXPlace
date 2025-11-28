@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
 
+
 const aiNavItems = [
   { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' },
   { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
