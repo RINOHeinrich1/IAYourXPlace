@@ -90,14 +90,21 @@ export async function POST(request: NextRequest) {
     const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
+    console.log('[POST /api/messages] Auth user:', user?.id || 'none');
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
     // Get user's profile ID
     const profileId = await getUserProfileId(supabase, user.id);
+    console.log('[POST /api/messages] User profile ID:', profileId || 'NOT FOUND');
+
     if (!profileId) {
-      return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
+      return NextResponse.json({
+        error: 'Profil non trouvé - Veuillez créer votre profil avant de discuter',
+        user_id: user.id
+      }, { status: 404 });
     }
 
     const body = await request.json();

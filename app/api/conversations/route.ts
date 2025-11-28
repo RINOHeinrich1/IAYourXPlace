@@ -8,14 +8,20 @@ export async function GET(request: NextRequest) {
     const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
+    console.log('[GET /api/conversations] Auth user:', user?.id || 'none', 'Error:', authError?.message || 'none');
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
     // Get user's profile ID
     const profileId = await getUserProfileId(supabase, user.id);
+    console.log('[GET /api/conversations] User profile ID:', profileId || 'NOT FOUND');
+
     if (!profileId) {
-      return NextResponse.json({ error: 'Profil non trouvé' }, { status: 404 });
+      // Return empty conversations instead of 404 - profile might not exist yet
+      console.log('[GET /api/conversations] Profile not found for user:', user.id);
+      return NextResponse.json({ conversations: [] });
     }
 
     // Fetch conversations where user is sender AND there's an AI model (model_id is not null)
