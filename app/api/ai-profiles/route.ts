@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
 // GET /api/ai-profiles - Get all AI models (or user's own)
 // Uses existing ai_models table
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { searchParams } = new URL(request.url);
     const ownOnly = searchParams.get('own') === 'true';
 
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
 // Uses existing ai_models table
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -119,6 +121,7 @@ export async function POST(request: NextRequest) {
 // Uses existing ai_models table
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
