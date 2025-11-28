@@ -3,9 +3,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react'; // Ajout de l'icône X
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
-import { useChat } from '@/lib/hooks/useChat';
 
 // --- Les définitions de constantes restent inchangées ---
 
@@ -18,15 +17,12 @@ const aiNavItems = [
     { name: 'Mes IA', active: false, iconPath: '/images/mesia.png' },
 ];
 
-// Extended message interface for UI state
 interface Message {
-    id?: string;
     role: 'user' | 'assistant';
     content: string;
     type?: 'text' | 'image';
     time: string;
-    reaction?: string;
-    reply_to_id?: string;
+    reaction?: string; // NOUVEAU: Champ pour stocker la réaction
 }
 
 const backItem = {
@@ -35,181 +31,199 @@ const backItem = {
     href: '/',
 };
 
-// Default chat items for demo (will be replaced by database conversations)
-const defaultChatItems = [
-    { id: '1', name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png' },
-    { id: '2', name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg' },
-    { id: '3', name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg' },
+const chatListItems = [
+    { id: 1, name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png' },
+    { id: 2, name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg' },
+    { id: 3, name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg' },
 ];
 
-const Sidebar = () => (
-    <div className="w-77 fixed left-0 top-0 h-full bg-black text-white p-4 z-30 border-r border-solid border-gray-400/50">
-        <div className="mb-10 mt-2">
-            <Image src="/logo2.png" alt="my X place Logo" width={188} height={44} />
-        </div>
-        <nav className="space-y-3">
-            {aiNavItems.map((item) => {
-                const isActive = item.active;
-                const classes = `flex items-center space-x-3 py-2 px-6 rounded-lg cursor-pointer
-            ${isActive ? '' : 'text-gray-400 hover:text-white'}`;
-                if (item.href) {
-                    return (
-                        <Link href={item.href} key={item.name} className={classes}>
-                            <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
-                            <span>{item.name}</span>
-                        </Link>
-                    );
-                }
-                return (
-                    <div key={item.name} className={classes}>
-                        <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
-                        <span>{item.name}</span>
-                    </div>
-                );
-            })}
+// Composant Sidebar (MIS À JOUR AVEC isCollapsed)
+const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
+    // Largeur dynamique : 299px vs 80px
+    const sidebarWidthClass = isCollapsed ? 'w-[80px]' : 'w-[299px]';
+    // Marge horizontale pour les éléments repliés
+    const itemPaddingClass = isCollapsed ? 'px-0 justify-center' : 'px-6 space-x-3';
 
-            <div className="pt-6">
-                <Link
-                    href={backItem.href}
-                    className="w-full flex items-center space-x-3 py-2 px-6 transition-colors rounded-lg cursor-pointer text-white hover:bg-red-600"
-                >
-                    <Image src={backItem.iconPath} alt="Back Icon" width={20} height={20} />
-                    <span>{backItem.name}</span>
-                </Link>
+    // Contenu du logo dynamique
+    const logoContent = isCollapsed ? (
+        <Image src="/logo-icon.png" alt="X" width={44} height={44} className="mx-auto" /> // Utiliser une icône ou une version réduite du logo
+    ) : (
+        <Image src="/logo2.png" alt="my X place Logo" width={188} height={44} />
+    );
+
+    return (
+        <div 
+            className={`${sidebarWidthClass} fixed left-0 top-0 h-full bg-black text-white p-4 z-30 border-r border-solid border-gray-400/50 transition-all duration-300`}
+        >
+            <div className="mb-10 mt-2">
+                {logoContent}
             </div>
-        </nav>
+            
+            <nav className="space-y-3">
+                {aiNavItems.map((item) => {
+                    const isActive = item.active;
+                    const classes = `flex items-center py-2 rounded-lg cursor-pointer transition-colors duration-300
+                    ${itemPaddingClass}
+                    ${isActive ? '' : 'text-gray-400 hover:text-white'}`;
+
+                    const itemContent = (
+                        <>
+                            <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
+                            {!isCollapsed && <span>{item.name}</span>}
+                        </>
+                    );
+
+                    if (item.href) {
+                        return (
+                            <Link href={item.href} key={item.name} className={classes}>
+                                {itemContent}
+                            </Link>
+                        );
+                    }
+                    return (
+                        <div key={item.name} className={classes}>
+                            {itemContent}
+                        </div>
+                    );
+                })}
+
+                <div className="pt-6">
+                    <Link
+                        href={backItem.href}
+                        className={`w-full flex items-center py-2 transition-colors rounded-lg cursor-pointer text-white hover:bg-red-600 ${itemPaddingClass}`}
+                    >
+                        <Image src={backItem.iconPath} alt="Back Icon" width={20} height={20} />
+                        {!isCollapsed && <span>{backItem.name}</span>}
+                    </Link>
+                </div>
+            </nav>
+        </div>
+    );
+};
+
+// NOUVEAU COMPOSANT: Espace d'Image pour la Mini-Sidebar
+const LargeImagePlaceholder = () => (
+    <div 
+        className="fixed top-0 right-0 h-full w-[calc(100vw-80px-320px-640px-80px)] bg-black/50 p-8 flex items-center justify-center transition-all duration-300"
+        style={{ 
+            // Positionnement et largeur pour occuper l'espace libre à droite
+            // 80 (mini sidebar) + 40 (marge) + 320 (chat list) + 40 (marge) + 640 (chat box) = 1120px
+            left: `calc(80px + 40px + 320px + 40px + 640px)`, 
+            width: `calc(100vw - 1120px)`, 
+            minWidth: '200px'
+        }}
+    >
+        <div 
+            className="w-full h-full bg-gray-900 rounded-3xl flex items-center justify-center overflow-hidden"
+            style={{ 
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}
+        >
+            {/* Remplacez '/images/large_background_ai.jpg' par le chemin de votre image */}
+            <Image 
+                src="/images/large_background_ai.jpg" 
+                alt="Espace pour contenu visuel ou publicitaire" 
+                layout="fill"
+                objectFit="cover"
+                className='opacity-70'
+            />
+             <div className="absolute text-white text-3xl font-bold bg-black/50 p-4 rounded-xl z-10">
+                Espace Libre (Contenu IA / Pub)
+            </div>
+        </div>
     </div>
 );
 
+
 // --- DISCUSSION PAGE ---
 export default function DiscuterPage() {
-    // Use the chat hook for database-backed conversations
-    const {
-        messages: dbMessages,
-        conversations,
-        currentConversation,
-        isSending,
-        sendMessage: sendDbMessage,
-        deleteMessage: deleteDbMessage,
-        updateReaction: updateDbReaction,
-        deleteConversation,
-        selectConversation,
-    } = useChat();
+    // NOUVEAU: État pour gérer la sidebar
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
+    
+    // Largeur de la sidebar (ajustée aux classes ci-dessus: 299px vs 80px)
+    const sidebarWidth = isSidebarCollapsed ? 80 : 299;
 
-    // Transform DB messages to UI messages format
-    const [messages, setMessages] = useState<Message[]>([]);
 
-    useEffect(() => {
-        const uiMessages: Message[] = dbMessages.map(msg => ({
-            id: msg.id,
-            role: msg.role || 'user', // Default to 'user' if role is undefined
-            content: msg.content || '',
-            type: msg.content_type === 'image' ? 'image' : 'text',
-            time: new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            reaction: msg.reaction,
-            reply_to_id: msg.reply_to_id,
-        }));
-        setMessages(uiMessages);
-    }, [dbMessages]);
+    const [selectedChatId, setSelectedChatId] = useState(chatListItems[0].id);
+    const activeChat = chatListItems.find(chat => chat.id === selectedChatId);
 
-    // Build chat list from conversations or use defaults
-    // Support both ai_model and ai_profile for backward compatibility
-    const chatListItems = conversations.length > 0
-        ? conversations.map(conv => {
-            const aiProfile = conv.ai_model || conv.ai_profile;
-            const lastMsgContent = conv.last_message?.content || '';
-            return {
-                id: conv.id,
-                name: aiProfile?.name || 'IA',
-                lastMessage: conv.last_message
-                    ? `${conv.last_message.role === 'user' ? 'vous: ' : ''}${lastMsgContent.substring(0, 30)}...`
-                    : 'Nouvelle conversation',
-                profileSrc: aiProfile?.avatar_url || '/images/imgmes1.png',
-            };
-        })
-        : defaultChatItems;
-
-    const [selectedChatId, setSelectedChatId] = useState<string>(chatListItems[0]?.id || '1');
-    const activeChat = chatListItems.find(chat => chat.id === selectedChatId) || chatListItems[0];
-
+    const [messages, setMessages] = useState<Message[]>([
+        // Votre tableau de messages initial (vide ou avec messages de test)
+    ]);
     const [input, setInput] = useState('');
-    const isLoading = isSending;
+    const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // ÉTAT POUR LA RÉPONSE
     const [replyTo, setReplyTo] = useState<number | null>(null);
-    const clearReply = () => setReplyTo(null);
+    const clearReply = () => setReplyTo(null); // Fonction pour fermer l'aperçu
 
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(() => { scrollToBottom(); }, [messages]);
 
-    // Handle conversation selection
-    const handleSelectConversation = useCallback(async (chatId: string) => {
-        setSelectedChatId(chatId);
-        if (conversations.length > 0) {
-            await selectConversation(chatId);
-        }
-    }, [conversations, selectConversation]);
-
+    // *** FONCTION sendMessage CONSERVÉE INTACTE ***
+    // (Utilise votre logique d'API /api/chat)
     const sendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
 
-        const replyToId = replyTo !== null && messages[replyTo]?.id ? messages[replyTo].id : undefined;
+        const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime };
 
-        clearReply();
+        // Stocker le message de réponse pour l'historique ou l'API si nécessaire
+        const replyInfo = replyTo !== null ? { repliedToContent: messages[replyTo].content, repliedToRole: messages[replyTo].role } : {};
+
+        setMessages(prev => [...prev, userMessage]);
         setInput('');
+        setIsLoading(true);
+        clearReply(); // IMPORTANT: Cache l'aperçu de la réponse après l'envoi
 
-        // Use database-backed sending if we have a conversation, otherwise use legacy API
-        // Support both model_id and ai_profile_id for backward compatibility
-        if (currentConversation?.model_id || currentConversation?.ai_profile_id || conversations.length > 0) {
-            await sendDbMessage(input.trim(), replyToId);
-        } else {
-            // Fallback to legacy API for demo purposes
-            const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-            const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime };
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // Envoyer l'historique et le message de l'utilisateur (incluant l'info de réponse si nécessaire)
+                body: JSON.stringify({ 
+                    messages: [...messages, userMessage], 
+                    replyInfo: replyInfo 
+                }), 
+            });
 
-            setMessages(prev => [...prev, userMessage]);
+            if (!response.ok) throw new Error('Erreur API');
 
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: [...messages, userMessage] }),
-                });
+            const data = await response.json();
+            let assistantMessage: Message = data.choices[0]?.message;
 
-                if (!response.ok) throw new Error('Erreur API');
-
-                const data = await response.json();
-                const assistantMessage = data.choices?.[0]?.message;
-
-                if (assistantMessage) {
-                    const isImage = assistantMessage.content.toLowerCase().includes("image");
-                    setMessages(prev => [
-                        ...prev,
-                        {
-                            role: 'assistant',
-                            content: isImage ? "mock" : assistantMessage.content,
-                            type: isImage ? "image" : "text",
-                            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                        }
-                    ]);
-                } else {
-                    setMessages(prev => [
-                        ...prev,
-                        { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
-                    ]);
-                }
-            } catch {
+            if (assistantMessage) {
+                const isImage = assistantMessage.content.toLowerCase().includes("image");
                 setMessages(prev => [
                     ...prev,
-                    { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
+                    {
+                        role: 'assistant',
+                        content: isImage ? "mock" : assistantMessage.content,
+                        type: isImage ? "image" : "text",
+                        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                    }
+                ]);
+            } else {
+                setMessages(prev => [
+                    ...prev,
+                    { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
                 ]);
             }
+        } catch (err) {
+            setMessages(prev => [
+                ...prev,
+                { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
+            ]);
+        } finally {
+            setIsLoading(false);
         }
-    }, [input, messages, isLoading, replyTo, currentConversation, conversations, sendDbMessage]);
+    }, [input, messages, isLoading, replyTo]); // Ajout de replyTo comme dépendance
+
+    // *** FIN sendMessage INTACTE ***
 
     if (!activeChat) return null;
 
@@ -245,50 +259,24 @@ export default function DiscuterPage() {
     };
 
     // Logique pour ajouter la réaction au message
-    const handleReaction = async (idx: number, emoji: string) => {
-        const message = messages[idx];
-        const currentReaction = message.reaction;
-        const newReaction = currentReaction === emoji ? null : emoji;
-
-        // Update local state immediately for responsiveness
+    const handleReaction = (idx: number, emoji: string) => {
         setMessages(prevMessages => {
             const newMessages = [...prevMessages];
-            newMessages[idx] = { ...newMessages[idx], reaction: newReaction || undefined };
+            const currentReaction = newMessages[idx].reaction;
+
+            if (currentReaction === emoji) {
+                newMessages[idx].reaction = undefined;
+            } else {
+                newMessages[idx].reaction = emoji;
+            }
+
             return newMessages;
         });
-
-        // If we have a message ID, persist to database
-        if (message.id) {
-            await updateDbReaction(message.id, newReaction);
-        }
-
         setOpenMenuIndex(null); // Ferme le menu après la sélection
     };
 
-    // Handle message deletion
-    const handleDeleteMessage = async (idx: number) => {
-        const message = messages[idx];
-        if (message.id) {
-            const success = await deleteDbMessage(message.id);
-            if (success) {
-                setMessages(prev => prev.filter((_, i) => i !== idx));
-            }
-        } else {
-            // For local messages without DB ID
-            setMessages(prev => prev.filter((_, i) => i !== idx));
-        }
-        setOpenMenuIndex(null);
-    };
 
-    // Handle conversation deletion
-    const handleDeleteConversation = async () => {
-        if (currentConversation?.id) {
-            await deleteConversation(currentConversation.id);
-        }
-    };
-
-
-    // MODIFIÉ: Composant Aperçu de Réponse (Reply Preview)
+    // NOUVEAU: Composant Aperçu de Réponse (Reply Preview)
     const ReplyPreview = () => {
         if (replyTo === null) return null;
 
@@ -299,24 +287,21 @@ export default function DiscuterPage() {
 
         return (
             <div
-                // MODIFIÉ: Retrait de bg-black/50
-                className="w-full p-4 mt-6 flex justify-between items-center z-10 mx-auto"
+                className="w-full bg-black/50 p-4 flex justify-between items-center z-10 mx-auto"
                 style={{
-                    width: '590px', // MODIFIÉ: Largeur raccourcie
+                    width: '640px',
                     height: '99px',
                     borderTopLeftRadius: '16px',
                     borderTopRightRadius: '16px',
                     borderWidth: '1px',
-                 
                     borderStyle: 'solid',
                     borderColor: 'rgba(255, 255, 255, 0.2)',
-                    // MODIFIÉ: Suppression du background inline
+                    background: 'linear-gradient(0deg, rgba(16,16,16,0.9) 0%, rgba(30,30,30,0.9) 100%)',
                     boxSizing: 'border-box',
                 }}
             >
                 <div className="flex flex-col overflow-hidden w-full h-full justify-center">
-                    {/* MODIFIÉ: Couleur du texte mise en blanc */}
-                    <span className="font-semibold text-sm text-white"> 
+                    <span className={`font-semibold text-sm ${isMe ? 'text-green-400' : 'text-blue-400'}`}>
                         Réponse à {repliedToName}
                     </span>
                     <p className="text-gray-300 text-sm whitespace-nowrap overflow-hidden text-ellipsis mt-1">
@@ -327,12 +312,7 @@ export default function DiscuterPage() {
                     onClick={clearReply} 
                     className="text-white hover:text-red-500 transition ml-4 flex-shrink-0 p-2 rounded-full hover:bg-white/10"
                 >
-                   <img
-    src="/icons/close.png"
-    className="w-6 h-6 cursor-pointer"
-    alt="close icon"
-/>
-
+                    <X size={20} /> {/* Icône croix */}
                 </button>
             </div>
         );
@@ -341,11 +321,15 @@ export default function DiscuterPage() {
 
     return (
         <div className="min-h-screen bg-black text-white">
-            <Sidebar />
-            <main className="ml-[299px] p-0 flex h-screen overflow-hidden">
+            <Sidebar isCollapsed={isSidebarCollapsed} /> {/* Passage de l'état */}
+            
+            {/* Marge dynamique pour le contenu principal */}
+            <main className={`p-0 flex h-screen overflow-hidden transition-all duration-300`} 
+                style={{ marginLeft: `${sidebarWidth + 40}px` }} 
+            >
                 <h1 className="text-4xl font-bold mb-4 ml-9 mt-9">Discuter</h1>
 
-
+                {/* Section Liste de Chat (laissé -ml-36 pour aligner avec le style initial) */}
                 <div className="w-[320px] h-[522px] bg-black border border-[#252525] rounded-[32px] p-6 flex flex-col mt-27 -ml-36">
                     <div className="w-[167px] h-[44px] rounded-[32px] flex items-center gap-2 px-5 py-[10px] mb-6 bg-gradient-to-r from-white/25 to-white/10">
                         <input type="text" placeholder="Rechercher" className="bg-transparent text-white w-full focus:outline-none placeholder-white/60" />
@@ -353,7 +337,7 @@ export default function DiscuterPage() {
                     </div>
                     <div className="space-y-2 overflow-y-auto custom-scrollbar-hide">
                         {chatListItems.map(chat => (
-                            <div key={chat.id} onClick={() => handleSelectConversation(chat.id)}
+                            <div key={chat.id} onClick={() => setSelectedChatId(chat.id)}
                                 className={`flex items-center space-x-4 p-3 rounded-xl cursor-pointer transition ${chat.id === selectedChatId ? 'bg-white/10' : 'hover:bg-[#1e1e1e]/50'}`}>
                                 <div className="w-[45px] h-[45px] rounded-full overflow-hidden flex-shrink-0">
                                     <Image src={chat.profileSrc} alt={chat.name} width={45} height={45} className="object-cover w-full h-full" />
@@ -383,16 +367,19 @@ export default function DiscuterPage() {
                                     alt="profile"
                                 />
                                 <div className="flex items-center space-x-4">
-                                    {/* <img
+                                    <img
                                         src="/images/magic.png"
                                         className="h-7 rounded-full"
                                         alt="magic"
-                                    /> */}
+                                    />
                                     <button className="text-white text-xl">⋮</button>
+                                    
+                                    {/* ACTIVATION DE LA MINI-SIDEBAR ICI (bascule) */}
                                     <img
                                         src="/images/vector.png"
-                                        className="w-6 h-5"
+                                        className="w-6 h-5 cursor-pointer"
                                         alt="options"
+                                        onClick={toggleSidebar} 
                                     />
                                 </div>
                             </div>
@@ -400,7 +387,7 @@ export default function DiscuterPage() {
                         </div>
 
 
-                        {/* Zone des messages */}
+                        {/* Zone des messages (reste inchangée) */}
                         <div className="flex-1 mt-4 overflow-y-auto space-y-3">
                             {messages.map((msg, idx) => {
                                 const isMe = msg.role === "user";
@@ -421,34 +408,40 @@ export default function DiscuterPage() {
                                         )}
 
                                         {/* Bulle + Popup */}
-                                        {/* Bulle + Réaction + Popup */}
-<div className="relative max-w-[320px] flex flex-col">
-    <div
-        onContextMenu={(e) => handleContextMenu(e, idx)}
-        onClick={() => toggleMenu(idx)}
-        className={`px-4 py-2 rounded-2xl text-white cursor-pointer`}
-        style={{ background: isMe ? "rgba(23,23,23,1)" : "rgba(98,98,98,1)" }}
-    >
-        {msg.type === "image" ? (
-            <div className="w-40 h-40 relative">
-                <Image
-                    src="/images/mock.png"
-                    alt="Mock Image"
-                    fill
-                    className="object-cover rounded-xl"
-                />
-            </div>
-        ) : (
-            msg.content
-        )}
-    </div>
+                                        <div className="relative max-w-[320px]">
+                                            <div
+                                                onContextMenu={(e) => handleContextMenu(e, idx)}
+                                                onClick={() => toggleMenu(idx)}
+                                                className={`px-4 py-2 rounded-2xl text-white cursor-pointer`}
+                                                style={{ background: isMe ? "rgba(23,23,23,1)" : "rgba(98,98,98,1)" }}
+                                            >
+                                                {msg.type === "image" ? (
+                                                    <div className="w-40 h-40 relative">
+                                                        <Image
+                                                            src="/images/mock.png"
+                                                            alt="Mock Image"
+                                                            fill
+                                                            className="object-cover rounded-xl"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    msg.content
+                                                )}
+                                            </div>
 
-    {/* Réaction sous le message */}
-    {msg.reaction && (
-        <div className="mt-1 text-xl">
-            {msg.reaction}
-        </div>
-    )}
+                                            {/* Réaction visible */}
+                                            {msg.reaction && (
+                                                <div
+                                                    className="absolute text-xl rounded-full p-[2px] shadow-lg border-2 border-black bg-[#1b1b1b]"
+                                                    style={{
+                                                        bottom: '-10px',
+                                                        right: isMe ? '0px' : 'auto',
+                                                        left: isMe ? 'auto' : '0px',
+                                                    }}
+                                                >
+                                                    {msg.reaction}
+                                                </div>
+                                            )}
 
 
                                             {isMenuOpen && (
@@ -478,24 +471,6 @@ export default function DiscuterPage() {
                                                             </div>
                                                         ))}
                                                     </div>
-
-                                                    {/* Message sélectionné pour aperçu */}
-                                                    <div className="w-full flex justify-end">
-                                                        <div
-                                                            className="text-white text-sm flex items-center"
-                                                            style={{
-                                                                background: "rgba(23, 23, 23, 1)",
-                                                                width: "114px",
-                                                                height: "26px",
-                                                                borderRadius: "32px",
-                                                                padding: "5px 10px",
-                                                                gap: "10px",
-                                                            }}
-                                                        >
-                                                            {msg.content}
-                                                        </div>
-                                                    </div>
-
 
                                                     {/* Heure + Actions */}
                                                     <div
@@ -527,19 +502,13 @@ export default function DiscuterPage() {
                                                                 <Pin size={16} />
                                                                 <span>Épingler</span>
                                                             </div>
-                                                            <div
-                                                                className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10"
-                                                                onClick={() => handleDeleteMessage(idx)}
-                                                            >
+                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
                                                                 <Trash2 size={16} />
                                                                 <span>Supprimer pour vous</span>
                                                             </div>
-                                                            <div
-                                                                className="flex items-center gap-2 p-1 rounded-lg cursor-pointer text-[#e95a5a] hover:bg-white/10"
-                                                                onClick={handleDeleteConversation}
-                                                            >
+                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer text-[#e95a5a] hover:bg-white/10">
                                                                 <Undo2 size={16} className="text-red-400" />
-                                                                <span>Supprimer la conversation</span>
+                                                                <span>Retirer</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -590,6 +559,9 @@ export default function DiscuterPage() {
                     </div>
                 </div>
             </main>
+            
+            {/* NOUVEAU: Afficher l'image lorsque la sidebar est repliée */}
+            {isSidebarCollapsed && <LargeImagePlaceholder />}
         </div>
     );
 }
