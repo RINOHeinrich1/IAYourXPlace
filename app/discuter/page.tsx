@@ -3,8 +3,9 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, X } from 'lucide-react'; // Ajout de l'icône X
+import { Loader2 } from 'lucide-react';
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
+import { useChat } from '@/lib/hooks/useChat';
 
 // --- Les définitions de constantes restent inchangées ---
 
@@ -17,12 +18,15 @@ const aiNavItems = [
     { name: 'Mes IA', active: false, iconPath: '/images/mesia.png' },
 ];
 
+// Extended message interface for UI state
 interface Message {
+    id?: string;
     role: 'user' | 'assistant';
     content: string;
     type?: 'text' | 'image';
     time: string;
-    reaction?: string; // NOUVEAU: Champ pour stocker la réaction
+    reaction?: string;
+    reply_to_id?: string;
 }
 
 const backItem = {
@@ -31,10 +35,11 @@ const backItem = {
     href: '/',
 };
 
-const chatListItems = [
-    { id: 1, name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png' },
-    { id: 2, name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg' },
-    { id: 3, name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg' },
+// Default chat items for demo (will be replaced by database conversations)
+const defaultChatItems = [
+    { id: '1', name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png' },
+    { id: '2', name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg' },
+    { id: '3', name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg' },
 ];
 
 const Sidebar = () => (
@@ -78,82 +83,133 @@ const Sidebar = () => (
 
 // --- DISCUSSION PAGE ---
 export default function DiscuterPage() {
-    const [selectedChatId, setSelectedChatId] = useState(chatListItems[0].id);
-    const activeChat = chatListItems.find(chat => chat.id === selectedChatId);
+    // Use the chat hook for database-backed conversations
+    const {
+        messages: dbMessages,
+        conversations,
+        currentConversation,
+        isSending,
+        sendMessage: sendDbMessage,
+        deleteMessage: deleteDbMessage,
+        updateReaction: updateDbReaction,
+        deleteConversation,
+        selectConversation,
+    } = useChat();
 
-    const [messages, setMessages] = useState<Message[]>([
-        // Votre tableau de messages initial (vide ou avec messages de test)
-    ]);
+    // Transform DB messages to UI messages format
+    const [messages, setMessages] = useState<Message[]>([]);
+
+    useEffect(() => {
+        const uiMessages: Message[] = dbMessages.map(msg => ({
+            id: msg.id,
+            role: msg.role || 'user', // Default to 'user' if role is undefined
+            content: msg.content || '',
+            type: msg.content_type === 'image' ? 'image' : 'text',
+            time: new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            reaction: msg.reaction,
+            reply_to_id: msg.reply_to_id,
+        }));
+        setMessages(uiMessages);
+    }, [dbMessages]);
+
+    // Build chat list from conversations or use defaults
+    // Support both ai_model and ai_profile for backward compatibility
+    const chatListItems = conversations.length > 0
+        ? conversations.map(conv => {
+            const aiProfile = conv.ai_model || conv.ai_profile;
+            const lastMsgContent = conv.last_message?.content || '';
+            return {
+                id: conv.id,
+                name: aiProfile?.name || 'IA',
+                lastMessage: conv.last_message
+                    ? `${conv.last_message.role === 'user' ? 'vous: ' : ''}${lastMsgContent.substring(0, 30)}...`
+                    : 'Nouvelle conversation',
+                profileSrc: aiProfile?.avatar_url || '/images/imgmes1.png',
+            };
+        })
+        : defaultChatItems;
+
+    const [selectedChatId, setSelectedChatId] = useState<string>(chatListItems[0]?.id || '1');
+    const activeChat = chatListItems.find(chat => chat.id === selectedChatId) || chatListItems[0];
+
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const isLoading = isSending;
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     // ÉTAT POUR LA RÉPONSE
     const [replyTo, setReplyTo] = useState<number | null>(null);
-    const clearReply = () => setReplyTo(null); // Fonction pour fermer l'aperçu
+    const clearReply = () => setReplyTo(null);
 
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     useEffect(() => { scrollToBottom(); }, [messages]);
+
+    // Handle conversation selection
+    const handleSelectConversation = useCallback(async (chatId: string) => {
+        setSelectedChatId(chatId);
+        if (conversations.length > 0) {
+            await selectConversation(chatId);
+        }
+    }, [conversations, selectConversation]);
 
     const sendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || isLoading) return;
 
-        const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-        const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime };
+        const replyToId = replyTo !== null && messages[replyTo]?.id ? messages[replyTo].id : undefined;
 
-        // Stocker le message de réponse pour l'historique ou l'API si nécessaire
-        const replyInfo = replyTo !== null ? { repliedToContent: messages[replyTo].content, repliedToRole: messages[replyTo].role } : {};
-
-        setMessages(prev => [...prev, userMessage]);
+        clearReply();
         setInput('');
-        setIsLoading(true);
-        clearReply(); // IMPORTANT: Cache l'aperçu de la réponse après l'envoi
 
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                // Envoyer l'historique et le message de l'utilisateur (incluant l'info de réponse si nécessaire)
-                body: JSON.stringify({ 
-                    messages: [...messages, userMessage], 
-                    replyInfo: replyInfo 
-                }), 
-            });
+        // Use database-backed sending if we have a conversation, otherwise use legacy API
+        // Support both model_id and ai_profile_id for backward compatibility
+        if (currentConversation?.model_id || currentConversation?.ai_profile_id || conversations.length > 0) {
+            await sendDbMessage(input.trim(), replyToId);
+        } else {
+            // Fallback to legacy API for demo purposes
+            const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime };
 
-            if (!response.ok) throw new Error('Erreur API');
+            setMessages(prev => [...prev, userMessage]);
 
-            const data = await response.json();
-            let assistantMessage: Message = data.choices[0]?.message;
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: [...messages, userMessage] }),
+                });
 
-            if (assistantMessage) {
-                const isImage = assistantMessage.content.toLowerCase().includes("image");
+                if (!response.ok) throw new Error('Erreur API');
+
+                const data = await response.json();
+                const assistantMessage = data.choices?.[0]?.message;
+
+                if (assistantMessage) {
+                    const isImage = assistantMessage.content.toLowerCase().includes("image");
+                    setMessages(prev => [
+                        ...prev,
+                        {
+                            role: 'assistant',
+                            content: isImage ? "mock" : assistantMessage.content,
+                            type: isImage ? "image" : "text",
+                            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                        }
+                    ]);
+                } else {
+                    setMessages(prev => [
+                        ...prev,
+                        { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
+                    ]);
+                }
+            } catch {
                 setMessages(prev => [
                     ...prev,
-                    {
-                        role: 'assistant',
-                        content: isImage ? "mock" : assistantMessage.content,
-                        type: isImage ? "image" : "text",
-                        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-                    }
-                ]);
-            } else {
-                setMessages(prev => [
-                    ...prev,
-                    { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
+                    { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
                 ]);
             }
-        } catch (err) {
-            setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
-            ]);
-        } finally {
-            setIsLoading(false);
         }
-    }, [input, messages, isLoading, replyTo]); // Ajout de replyTo comme dépendance
+    }, [input, messages, isLoading, replyTo, currentConversation, conversations, sendDbMessage]);
 
     if (!activeChat) return null;
 
@@ -189,20 +245,46 @@ export default function DiscuterPage() {
     };
 
     // Logique pour ajouter la réaction au message
-    const handleReaction = (idx: number, emoji: string) => {
+    const handleReaction = async (idx: number, emoji: string) => {
+        const message = messages[idx];
+        const currentReaction = message.reaction;
+        const newReaction = currentReaction === emoji ? null : emoji;
+
+        // Update local state immediately for responsiveness
         setMessages(prevMessages => {
             const newMessages = [...prevMessages];
-            const currentReaction = newMessages[idx].reaction;
-
-            if (currentReaction === emoji) {
-                newMessages[idx].reaction = undefined;
-            } else {
-                newMessages[idx].reaction = emoji;
-            }
-
+            newMessages[idx] = { ...newMessages[idx], reaction: newReaction || undefined };
             return newMessages;
         });
+
+        // If we have a message ID, persist to database
+        if (message.id) {
+            await updateDbReaction(message.id, newReaction);
+        }
+
         setOpenMenuIndex(null); // Ferme le menu après la sélection
+    };
+
+    // Handle message deletion
+    const handleDeleteMessage = async (idx: number) => {
+        const message = messages[idx];
+        if (message.id) {
+            const success = await deleteDbMessage(message.id);
+            if (success) {
+                setMessages(prev => prev.filter((_, i) => i !== idx));
+            }
+        } else {
+            // For local messages without DB ID
+            setMessages(prev => prev.filter((_, i) => i !== idx));
+        }
+        setOpenMenuIndex(null);
+    };
+
+    // Handle conversation deletion
+    const handleDeleteConversation = async () => {
+        if (currentConversation?.id) {
+            await deleteConversation(currentConversation.id);
+        }
     };
 
 
@@ -271,7 +353,7 @@ export default function DiscuterPage() {
                     </div>
                     <div className="space-y-2 overflow-y-auto custom-scrollbar-hide">
                         {chatListItems.map(chat => (
-                            <div key={chat.id} onClick={() => setSelectedChatId(chat.id)}
+                            <div key={chat.id} onClick={() => handleSelectConversation(chat.id)}
                                 className={`flex items-center space-x-4 p-3 rounded-xl cursor-pointer transition ${chat.id === selectedChatId ? 'bg-white/10' : 'hover:bg-[#1e1e1e]/50'}`}>
                                 <div className="w-[45px] h-[45px] rounded-full overflow-hidden flex-shrink-0">
                                     <Image src={chat.profileSrc} alt={chat.name} width={45} height={45} className="object-cover w-full h-full" />
@@ -445,13 +527,19 @@ export default function DiscuterPage() {
                                                                 <Pin size={16} />
                                                                 <span>Épingler</span>
                                                             </div>
-                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10">
+                                                            <div
+                                                                className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10"
+                                                                onClick={() => handleDeleteMessage(idx)}
+                                                            >
                                                                 <Trash2 size={16} />
                                                                 <span>Supprimer pour vous</span>
                                                             </div>
-                                                            <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer text-[#e95a5a] hover:bg-white/10">
+                                                            <div
+                                                                className="flex items-center gap-2 p-1 rounded-lg cursor-pointer text-[#e95a5a] hover:bg-white/10"
+                                                                onClick={handleDeleteConversation}
+                                                            >
                                                                 <Undo2 size={16} className="text-red-400" />
-                                                                <span>Retirer</span>
+                                                                <span>Supprimer la conversation</span>
                                                             </div>
                                                         </div>
                                                     </div>
