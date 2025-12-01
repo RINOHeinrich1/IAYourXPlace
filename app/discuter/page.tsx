@@ -8,7 +8,40 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
 
+// Types for API data
+interface AIModel {
+  id: string;
+  name: string;
+  avatar_url?: string;
+  avatar?: string;
+  personality?: string;
+  description?: string;
+  systemPrompt?: string;
+}
+
+interface Conversation {
+  id: string;
+  model_id: string;
+  title?: string;
+  last_message_at?: string;
+  ai_model?: AIModel | AIModel[];
+  last_message?: {
+    content: string;
+    role: string;
+    created_at: string;
+  };
+}
+
+interface ChatListItem {
+  id: string; // conversation id
+  modelId: string; // AI model id
+  name: string;
+  lastMessage: string;
+  profileSrc: string;
+}
+
 interface Message {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   type?: 'text' | 'image';
@@ -19,24 +52,27 @@ interface Message {
   removed?: boolean;
 }
 
-const chatListItems = [
-  { id: 1, name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png' },
-  { id: 2, name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg' },
-  { id: 3, name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg' },
-];
-
 export default function DiscuterPage() {
   // Sidebar
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
   const sidebarWidth = isSidebarCollapsed ? 80 : 299;
 
-  const [selectedChatId, setSelectedChatId] = useState(chatListItems[0].id);
+  // Dynamic chat list from API
+  const [chatListItems, setChatListItems] = useState<ChatListItem[]>([]);
+  const [aiModels, setAiModels] = useState<AIModel[]>([]);
+  const [conversations, setConversations] = useState<Map<string, string>>(new Map()); // modelId -> conversationId
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
+
   const activeChat = chatListItems.find(chat => chat.id === selectedChatId);
+  // Get the full AI model info for the selected chat
+  const activeAiModel = aiModels.find(m => m.id === activeChat?.modelId);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   // index of message currently hovered / showing reaction bar
@@ -53,66 +89,205 @@ export default function DiscuterPage() {
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [messages]);
 
+  // Fetch AI models and existing conversations on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoadingChats(true);
+      try {
+        // Fetch AI models and existing conversations in parallel
+        const [modelsRes, convsRes] = await Promise.all([
+          fetch('/api/ai-profiles'),
+          fetch('/api/conversations')
+        ]);
+
+        const modelsData = await modelsRes.json();
+        const convsData = await convsRes.json();
+
+        const models: AIModel[] = modelsData.models || modelsData.profiles || [];
+        const existingConvs: Conversation[] = convsData.conversations || [];
+
+        setAiModels(models);
+
+        // Build a map of modelId -> conversationId for existing conversations
+        const convMap = new Map<string, string>();
+        existingConvs.forEach(conv => {
+          if (conv.model_id) {
+            convMap.set(conv.model_id, conv.id);
+          }
+        });
+        setConversations(convMap);
+
+        // Build chat list items from AI models with conversation info
+        const chatItems: ChatListItem[] = models.map(model => {
+          const existingConv = existingConvs.find(c => c.model_id === model.id);
+          const lastMsg = existingConv?.last_message;
+          let lastMessage = 'Démarrer une conversation';
+          if (lastMsg) {
+            const prefix = lastMsg.role === 'user' ? 'vous: ' : '';
+            lastMessage = prefix + (lastMsg.content?.substring(0, 30) || '') + (lastMsg.content && lastMsg.content.length > 30 ? '...' : '');
+          }
+
+          return {
+            id: existingConv?.id || model.id, // use conversation id if exists, otherwise model id
+            modelId: model.id,
+            name: model.name,
+            lastMessage,
+            profileSrc: model.avatar_url || model.avatar || '/images/default-avatar.png'
+          };
+        });
+
+        setChatListItems(chatItems);
+
+        // Select first chat if available
+        if (chatItems.length > 0) {
+          setSelectedChatId(chatItems[0].id);
+        }
+      } catch (error) {
+        console.error('Error fetching chat data:', error);
+      } finally {
+        setIsLoadingChats(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Load messages when selected chat changes
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!selectedChatId || !activeChat) return;
+
+      // Check if this is a conversation ID (UUID format) or just a model ID
+      const conversationId = conversations.get(activeChat.modelId);
+
+      if (!conversationId) {
+        // No conversation exists yet for this AI model - start fresh
+        setMessages([]);
+        return;
+      }
+
+      setIsLoadingMessages(true);
+      try {
+        const res = await fetch(`/api/messages?conversation_id=${conversationId}`);
+        const data = await res.json();
+
+        if (data.messages && Array.isArray(data.messages)) {
+          const loadedMessages: Message[] = data.messages.map((msg: any) => ({
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+            type: msg.content_type === 'image' ? 'image' : 'text',
+            time: new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            reaction: msg.reaction,
+            pinned: false,
+            removed: msg.is_deleted,
+          }));
+          setMessages(loadedMessages);
+        }
+      } catch (error) {
+        console.error('Error loading messages:', error);
+        setMessages([]);
+      } finally {
+        setIsLoadingMessages(false);
+      }
+    };
+
+    loadMessages();
+  }, [selectedChatId, activeChat, conversations]);
+
+  // Send message using /api/messages (with database persistence)
   const sendMessage = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !activeChat) return;
 
     const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    // attach reply info into the message payload when replying
     const replyPayload = replyTo !== null ? { index: replyTo, content: messages[replyTo].content, role: messages[replyTo].role } : undefined;
-    const userMessage: Message & { reply?: any } = { role: 'user', content: input.trim(), type: 'text', time: currentTime, reply: replyPayload };
+    const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime, reply: replyPayload };
 
+    // Optimistically add user message to UI
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
     clearReply();
 
     try {
-      // build the messages payload we send to the API
-      const messagesForApi = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
+      // Get or use existing conversation ID
+      let conversationId = conversations.get(activeChat.modelId);
 
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messagesForApi }),
+        body: JSON.stringify({
+          model_id: activeChat.modelId,
+          conversation_id: conversationId,
+          content: input.trim(),
+          content_type: 'text',
+        }),
       });
 
-      if (!response.ok) throw new Error('Erreur API');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erreur API');
+      }
 
       const data = await response.json();
-      let assistantMessage: Message = data.choices[0]?.message;
 
-      if (assistantMessage) {
-        const isImage = assistantMessage.content.toLowerCase().includes("image");
-        // preserve the reply payload so assistant replies show the replied message
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: isImage ? "mock" : assistantMessage.content,
-            type: isImage ? "image" : "text",
-            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            reply: replyPayload,
-          }
-        ]);
-      } else {
-        setMessages(prev => [
-          ...prev,
-          { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: currentTime, reply: replyPayload }
-        ]);
+      // Update conversation mapping if new conversation was created
+      if (data.conversation_id && !conversationId) {
+        setConversations(prev => new Map(prev).set(activeChat.modelId, data.conversation_id));
+        // Update chat list item ID to use conversation ID
+        setChatListItems(prev => prev.map(item =>
+          item.modelId === activeChat.modelId
+            ? { ...item, id: data.conversation_id }
+            : item
+        ));
+        setSelectedChatId(data.conversation_id);
       }
-    } catch {
+
+      // Update UI with the saved messages (including IDs from database)
+      if (data.user_message && data.assistant_message) {
+        setMessages(prev => {
+          // Replace the optimistic user message with the one from DB (with ID)
+          const withoutOptimistic = prev.slice(0, -1);
+          return [
+            ...withoutOptimistic,
+            {
+              id: data.user_message.id,
+              role: 'user' as const,
+              content: data.user_message.content,
+              type: 'text' as const,
+              time: new Date(data.user_message.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+              reply: replyPayload,
+            },
+            {
+              id: data.assistant_message.id,
+              role: 'assistant' as const,
+              content: data.assistant_message.content,
+              type: 'text' as const,
+              time: new Date(data.assistant_message.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            }
+          ];
+        });
+
+        // Update last message in chat list
+        setChatListItems(prev => prev.map(item =>
+          item.modelId === activeChat.modelId
+            ? { ...item, lastMessage: data.assistant_message.content?.substring(0, 30) + '...' }
+            : item
+        ));
+      }
+    } catch (error: any) {
+      console.error('Error sending message:', error);
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: currentTime }
+        { role: 'assistant', content: `💥 ${error.message || 'Erreur réseau ou serveur.'}`, type: 'text', time: currentTime }
       ]);
     } finally {
       setIsLoading(false);
     }
-  }, [input, messages, isLoading, replyTo]);
+  }, [input, messages, isLoading, replyTo, activeChat, conversations]);
 
-  if (!activeChat) return null;
-
+  // These hooks MUST be called unconditionally (before any early returns)
   const reactions = ["❤️", "😢", "😂", "😮", "😡", "👍", "➕"];
 
   const toggleMenu = useCallback((index: number) => {
@@ -128,6 +303,43 @@ export default function DiscuterPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleScroll = useCallback(() => {
+    const page = document.getElementById('discuter-page');
+    if (page) {
+      page.style.overflowY = 'auto';
+    }
+  }, []);
+
+  useEffect(() => {
+    handleScroll();
+  }, [handleScroll]);
+
+  // Show loading state while fetching chats
+  if (isLoadingChats) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 size={48} className="animate-spin text-white/60" />
+          <p className="text-white/60">Chargement des conversations...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show message if no AI models available
+  if (chatListItems.length === 0) {
+    return (
+      <div className="min-h-screen bg-black text-white flex" id="discuter-page">
+        <Sidebar isCollapsed={isSidebarCollapsed} />
+        <main className="flex-1 flex flex-col items-center justify-center p-6" style={{ marginLeft: `${sidebarWidth}px` }}>
+          <h1 className="text-4xl font-bold mb-6">Discuter</h1>
+          <p className="text-white/60 text-lg">Aucun modèle IA disponible.</p>
+          <p className="text-white/40 text-sm mt-2">Créez un modèle IA pour commencer à discuter.</p>
+        </main>
+      </div>
+    );
+  }
 
   const handleContextMenu = (e: React.MouseEvent, index: number) => {
     e.preventDefault();
@@ -222,10 +434,10 @@ export default function DiscuterPage() {
   };
 
   const ReplyPreview = () => {
-    if (replyTo === null) return null;
+    if (replyTo === null || !messages[replyTo]) return null;
     const repliedMessage = messages[replyTo];
     const isMe = repliedMessage.role === 'user';
-    const repliedToName = isMe ? "vous-même" : activeChat.name;
+    const repliedToName = isMe ? "vous-même" : (activeChat?.name || 'IA');
 
     return (
      <div
@@ -267,17 +479,6 @@ export default function DiscuterPage() {
 
 
   };
-
-  const handleScroll = () => {
-    const page = document.getElementById('discuter-page');
-    if (page) {
-      page.style.overflowY = 'auto';
-    }
-  };
-
-  useEffect(() => {
-    handleScroll();
-  }, [/* dependencies if any */]);
 
   // compute pinned and non-pinned indices (keep original array order and indices)
   const pinnedIndices = messages
@@ -354,7 +555,13 @@ export default function DiscuterPage() {
 
               {/* Header discussion */}
               <div className="flex items-center justify-between mb-4">
-                <img src="/images/imgmes1.png" className="w-14 h-14 rounded-full object-cover" alt="profile" />
+                <div className="flex items-center gap-3">
+                  <img src={activeChat?.profileSrc || '/images/default-avatar.png'} className="w-14 h-14 rounded-full object-cover" alt="profile" />
+                  <div>
+                    <h3 className="text-white font-semibold">{activeChat?.name || 'Chat'}</h3>
+                    <p className="text-gray-400 text-xs">En ligne</p>
+                  </div>
+                </div>
                 <div className="flex items-center space-x-4">
                   <img src="/images/magic.png" className="h-7 rounded-full" alt="magic" />
                   <div className="relative" ref={menuRef}>
@@ -389,7 +596,7 @@ export default function DiscuterPage() {
 
                   return (
                     <div key={`pinned-${origIdx}`} className={`flex mb-2 ${isMe ? "justify-end" : "justify-start"}`}>
-                      {!isMe && <img src="/images/imgmes1.png" className="w-12 h-12 rounded-full object-cover mr-2" alt="assistant" />}
+                      {!isMe && <img src={activeChat?.profileSrc || '/images/default-avatar.png'} className="w-12 h-12 rounded-full object-cover mr-2" alt="assistant" />}
                       <div className="relative max-w-[320px]">
                         <div className={`px-4 py-2 rounded-2xl cursor-pointer border border-yellow-400 bg-yellow-100/5 flex items-center gap-3`}>
                           <div className="w-12 h-12 bg-[#111] rounded-md flex items-center justify-center mr-2">{/* place pour image */}
@@ -407,20 +614,26 @@ export default function DiscuterPage() {
                 })}
 
                 {/* remaining messages */}
+                {isLoadingMessages ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 size={24} className="animate-spin text-white/40" />
+                    <span className="ml-2 text-white/40">Chargement des messages...</span>
+                  </div>
+                ) : null}
                 {otherIndices.map(origIdx => {
                   const msg = messages[origIdx];
                   const isMe = msg.role === "user";
                   const isMenuOpen = openMenuIndex === origIdx;
                   return (
                     <div key={origIdx} className={`flex mb-2 ${isMe ? "justify-end" : "justify-start"}`}>
-                      {!isMe && <img src="/images/imgmes1.png" className="w-12 h-12 rounded-full object-cover mr-2" alt="assistant" />}
+                      {!isMe && <img src={activeChat?.profileSrc || '/images/default-avatar.png'} className="w-12 h-12 rounded-full object-cover mr-2" alt="assistant" />}
                       <div className="relative w-auto max-w-[380px]">
 
                         <div onContextMenu={(e) => handleContextMenu(e, origIdx)} onClick={() => toggleMenu(origIdx)} className={`px-4 py-2 rounded-2xl text-white cursor-pointer`} style={{ background: isMe ? "rgba(23,23,23,1)" : "rgba(98,98,98,1)" }}>
                           {/* if this message is a reply to another message, show a small inline reply preview */}
                           {msg.reply && (
                             <div className="mb-2 p-2 rounded-lg bg-black/40 border border-white/5 text-xs max-w-[270px] overflow-hidden text-ellipsis">
-                              <div className={`font-semibold ${msg.reply.role === 'user' ? 'text-green-300' : 'text-blue-300'}`}>{msg.reply.role === 'user' ? 'vous' : activeChat.name}</div>
+                              <div className={`font-semibold ${msg.reply.role === 'user' ? 'text-green-300' : 'text-blue-300'}`}>{msg.reply.role === 'user' ? 'vous' : activeChat?.name}</div>
                               <div className="text-gray-300 truncate text-sm mt-1">{msg.reply.content}</div>
                             </div>
                           )}
@@ -531,7 +744,15 @@ export default function DiscuterPage() {
             {/* Conteneur de l'image (collé à la card discussion) - show only when sidebar is mini (active) */}
             {isSidebarCollapsed && (
               <div className="flex-shrink-0 ml-0">
-                <LargeImagePlaceholder alignTop />
+                <LargeImagePlaceholder
+                  alignTop
+                  character={activeAiModel ? {
+                    name: activeAiModel.name,
+                    avatar_url: activeAiModel.avatar_url || activeAiModel.avatar,
+                    description: activeAiModel.description,
+                    personality: activeAiModel.personality,
+                  } : undefined}
+                />
               </div>
             )}
           </div>

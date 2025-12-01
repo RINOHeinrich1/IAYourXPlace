@@ -90,20 +90,47 @@ export const Sidebar = ({ isCollapsed }: { isCollapsed: boolean }) => {
   );
 };
 
+// Character data for sidebar display
+interface CharacterInfo {
+  name: string;
+  avatar_url?: string;
+  description?: string;
+  personality?: string;
+  age?: number;
+  body_type?: string;
+  relationship?: string[];
+  ethnicities?: string[];
+  profession?: string[];
+}
+
 // --- Composant LargeImagePlaceholder ---
-export const LargeImagePlaceholder = ({ alignTop = false }: { alignTop?: boolean }) => {
+export const LargeImagePlaceholder = ({
+  alignTop = false,
+  character
+}: {
+  alignTop?: boolean;
+  character?: CharacterInfo;
+}) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const router = useRouter();
 
+  // Build images array: character avatar + placeholder options
+  const characterAvatar = character?.avatar_url || '/images/default-avatar.png';
+  const dynamicImages = [
+    { src: characterAvatar, alt: `${character?.name || 'AI'} - Image 1`, name: 'Image 1' },
+    { src: characterAvatar, alt: `${character?.name || 'AI'} - Image 2`, name: 'Image 2' },
+    { src: '', alt: 'Generate New - Image 3', name: 'Generate New' },
+  ];
+
   const nextImage = () => {
-    if (currentImageIndex < placeholderImages.length - 1) setCurrentImageIndex(prev => prev + 1);
+    if (currentImageIndex < dynamicImages.length - 1) setCurrentImageIndex(prev => prev + 1);
   };
 
   const prevImage = () => {
     if (currentImageIndex > 0) setCurrentImageIndex(prev => prev - 1);
   };
 
-  const currentImage = placeholderImages[currentImageIndex];
+  const currentImage = dynamicImages[currentImageIndex];
 
   const outerClass = `w-[400px] bg-black/50 p-0 transition-all duration-300 z-20 self-start ${
     alignTop ? 'mt-0' : 'mt-6'
@@ -114,8 +141,18 @@ export const LargeImagePlaceholder = ({ alignTop = false }: { alignTop?: boolean
     : 'relative w-[95%] h-[390px] -ml-8 mt-16';
 
   const handleRedirect = () => {
-    router.push(`/generation?img=${encodeURIComponent(currentImage.src || '/images/imgmes2.jpg')}&name=${encodeURIComponent(currentImage.name)}`);
+    router.push(`/generation?img=${encodeURIComponent(currentImage.src || characterAvatar)}&name=${encodeURIComponent(character?.name || 'AI')}`);
   };
+
+  // Character info with fallbacks
+  const charName = character?.name || 'AI Character';
+  const charDescription = character?.description || character?.personality || 'An AI companion ready to chat with you.';
+  const charAge = character?.age ? `${character.age} ans` : 'N/A';
+  const charBody = character?.body_type || 'N/A';
+  const charRelation = character?.relationship?.[0] || 'N/A';
+  const charEthnicity = character?.ethnicities?.[0] || 'N/A';
+  const charProfession = character?.profession?.[0] || 'N/A';
+  const charPersonality = character?.personality?.substring(0, 20) || 'N/A';
 
   return (
     <div className={outerClass}>
@@ -126,48 +163,32 @@ export const LargeImagePlaceholder = ({ alignTop = false }: { alignTop?: boolean
             background: currentImageIndex === 2 ? 'radial-gradient(74.76% 74.76% at 26.01% 25.24%, #D91A2A 0%, #202020 100%)' : undefined,
             borderRadius: '1.5rem',
           }}>
-            {/* Image pour les 2 premières cartes */}
-           {/* Image pour la première image uniquement */}
-{/* Première image simple */}
-{currentImageIndex === 0 && (
-  <Image
-    src={currentImage.src}
-    alt={currentImage.alt}
-    fill
-    className="object-cover rounded-3xl transition-opacity duration-500 cursor-pointer"
-    onClick={handleRedirect}
-  />
-)}
+            {/* First and second images */}
+            {(currentImageIndex === 0 || currentImageIndex === 1) && currentImage.src && (
+              <>
+                <Image
+                  src={currentImage.src}
+                  alt={currentImage.alt}
+                  fill
+                  className="object-cover rounded-3xl transition-opacity duration-500 cursor-pointer"
+                  onClick={handleRedirect}
+                />
+                {currentImageIndex === 1 && (
+                  <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-auto">
+                    <button className="w-16 h-16 flex items-center justify-center rounded-full hover:bg-black/70 transition">
+                      <Image src="/icons/rounded_play.png" alt="Play Video" width={40} height={40} />
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
 
-{/* Deuxième image avec icône Play */}
-{currentImageIndex === 1 && (
-  <>
-    <Image
-      src={currentImage.src}
-      alt={currentImage.alt}
-      fill
-      className="object-cover rounded-3xl transition-opacity duration-500 cursor-pointer"
-      onClick={handleRedirect}
-    />
-    <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-auto">
-      <button
-        className="w-16 h-16 flex items-center justify-center  rounded-full hover:bg-black/70 transition"
-        // onClick={handleRedirect}
-      >
-        <Image src="/icons/rounded_play.png" alt="Play Video" width={40} height={40} />
-      </button>
-    </div>
-  </>
-)}
-
-
-            {/* Grand bouton + pour la troisième carte */}
+            {/* Third card - generate new */}
             {currentImageIndex === 2 && (
               <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-auto">
                 <button
                   onClick={handleRedirect}
                   className="w-28 h-28 flex items-center justify-center rounded-full transition"
-                 
                 >
                   <Image src="/icons/plus.png" alt="Plus" width={100} height={100} />
                 </button>
@@ -186,7 +207,7 @@ export const LargeImagePlaceholder = ({ alignTop = false }: { alignTop?: boolean
             )}
 
             {/* Bouton Next */}
-            {currentImageIndex < placeholderImages.length - 1 && (
+            {currentImageIndex < dynamicImages.length - 1 && (
               <button
                 onClick={nextImage}
                 className="absolute top-1/2 right-0 transform -translate-y-1/2 z-20 cursor-pointer"
@@ -200,21 +221,20 @@ export const LargeImagePlaceholder = ({ alignTop = false }: { alignTop?: boolean
 
         {/* Contenu texte et infos */}
         <div className="p-6 bg-black rounded-b-3xl w-full">
-          <h2 className="text-white text-3xl font-bold mb-3">Elizabeth Garcia</h2>
-          <p className="text-gray-400 text-sm mb-4 leading-relaxed">
-            Katarina Sommerfeld est une étudiante en médecine allemande connue pour son charme et son sourire. Sociable et intelligente, c'est le centre d'attention de toutes les fêtes, surtout quand il y a de la bière ! Katarina aime rencontrer du monde et essaie toujours de laisser une impression durable.
+          <h2 className="text-white text-3xl font-bold mb-3">{charName}</h2>
+          <p className="text-gray-400 text-sm mb-4 leading-relaxed line-clamp-4">
+            {charDescription}
           </p>
           <span className="text-gray-400 text-sm block mb-4">À propos de moi:</span>
           <div className="flex justify-between w-full mb-4">
-            <InfoItem label="Age" value="23 ans" />
-            <InfoItem label="Corps" value="Mince" />
-            <InfoItem label="Relation" value="Célibataire" />
+            <InfoItem label="Age" value={charAge} />
+            <InfoItem label="Corps" value={charBody} />
+            <InfoItem label="Relation" value={charRelation} />
           </div>
           <div className="flex justify-between w-full">
-            <InfoItem label="Ethnicité" value="Asiatique" />
-            <InfoItem label="Profession" value="Étudiante" />
-            <InfoItem label="Personnalité" value="Soumise" />
-            <InfoItem label="Kinks" value="Flirt timide" />
+            <InfoItem label="Ethnicité" value={charEthnicity} />
+            <InfoItem label="Profession" value={charProfession} />
+            <InfoItem label="Personnalité" value={charPersonality} />
           </div>
         </div>
       </div>
