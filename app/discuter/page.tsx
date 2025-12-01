@@ -38,6 +38,7 @@ interface ChatListItem {
   name: string;
   lastMessage: string;
   profileSrc: string;
+  lastAiResponseAt?: string; // ISO timestamp of last AI response for sorting
 }
 
 interface Message {
@@ -84,7 +85,50 @@ export default function DiscuterPage() {
   const [undoStack, setUndoStack] = useState<Array<any>>([]);
 
   const [replyTo, setReplyTo] = useState<number | null>(null);
-  const clearReply = () => setReplyTo(null);
+
+  // Persist replyTo state in localStorage
+  const REPLY_STORAGE_KEY = 'discuter_reply_to';
+
+  // Load replyTo from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(REPLY_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only restore if it's for the same conversation
+        if (parsed.conversationId === selectedChatId && typeof parsed.replyTo === 'number') {
+          setReplyTo(parsed.replyTo);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading replyTo from localStorage:', e);
+    }
+  }, [selectedChatId]);
+
+  // Save replyTo to localStorage when it changes
+  useEffect(() => {
+    try {
+      if (replyTo !== null && selectedChatId) {
+        localStorage.setItem(REPLY_STORAGE_KEY, JSON.stringify({
+          conversationId: selectedChatId,
+          replyTo: replyTo
+        }));
+      } else {
+        localStorage.removeItem(REPLY_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.error('Error saving replyTo to localStorage:', e);
+    }
+  }, [replyTo, selectedChatId]);
+
+  const clearReply = () => {
+    setReplyTo(null);
+    try {
+      localStorage.removeItem(REPLY_STORAGE_KEY);
+    } catch (e) {
+      console.error('Error removing replyTo from localStorage:', e);
+    }
+  };
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [messages]);
@@ -122,9 +166,20 @@ export default function DiscuterPage() {
           const existingConv = existingConvs.find(c => c.model_id === model.id);
           const lastMsg = existingConv?.last_message;
           let lastMessage = 'Démarrer une conversation';
+          // Track last AI response timestamp for sorting (use last_message if it's from AI, otherwise use last_message_at)
+          let lastAiResponseAt: string | undefined = undefined;
+
           if (lastMsg) {
             const prefix = lastMsg.role === 'user' ? 'vous: ' : '';
             lastMessage = prefix + (lastMsg.content?.substring(0, 30) || '') + (lastMsg.content && lastMsg.content.length > 30 ? '...' : '');
+
+            // If the last message is from AI, use its timestamp for sorting
+            if (lastMsg.role === 'assistant') {
+              lastAiResponseAt = lastMsg.created_at;
+            } else if (existingConv?.last_message_at) {
+              // Otherwise use the conversation's last_message_at as a fallback
+              lastAiResponseAt = existingConv.last_message_at;
+            }
           }
 
           return {
@@ -132,8 +187,19 @@ export default function DiscuterPage() {
             modelId: model.id,
             name: model.name,
             lastMessage,
-            profileSrc: model.avatar_url || model.avatar || '/images/default-avatar.png'
+            profileSrc: model.avatar_url || model.avatar || '/images/default-avatar.png',
+            lastAiResponseAt
           };
+        });
+
+        // Sort chat items: conversations with most recent AI responses first
+        // Chats without any AI response (new chats) go to the end
+        chatItems.sort((a, b) => {
+          if (!a.lastAiResponseAt && !b.lastAiResponseAt) return 0;
+          if (!a.lastAiResponseAt) return 1; // a goes after b
+          if (!b.lastAiResponseAt) return -1; // a goes before b
+          // Both have timestamps - sort by most recent first (descending)
+          return new Date(b.lastAiResponseAt).getTime() - new Date(a.lastAiResponseAt).getTime();
         });
 
         setChatListItems(chatItems);
@@ -269,12 +335,25 @@ export default function DiscuterPage() {
           ];
         });
 
-        // Update last message in chat list
-        setChatListItems(prev => prev.map(item =>
-          item.modelId === activeChat.modelId
-            ? { ...item, lastMessage: data.assistant_message.content?.substring(0, 30) + '...' }
-            : item
-        ));
+        // Update last message in chat list and re-sort by most recent AI response
+        setChatListItems(prev => {
+          const updated = prev.map(item =>
+            item.modelId === activeChat.modelId
+              ? {
+                  ...item,
+                  lastMessage: data.assistant_message.content?.substring(0, 30) + '...',
+                  lastAiResponseAt: data.assistant_message.created_at
+                }
+              : item
+          );
+          // Re-sort: most recent AI response first
+          return updated.sort((a, b) => {
+            if (!a.lastAiResponseAt && !b.lastAiResponseAt) return 0;
+            if (!a.lastAiResponseAt) return 1;
+            if (!b.lastAiResponseAt) return -1;
+            return new Date(b.lastAiResponseAt).getTime() - new Date(a.lastAiResponseAt).getTime();
+          });
+        });
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
@@ -763,10 +842,87 @@ export default function DiscuterPage() {
             open={shareModal.open}
             index={shareModal.index}
             messages={messages}
-            chatListItems={chatListItems}
+            chatListItems={chatListItems.filter(chat => chat.id !== selectedChatId)} // Exclude current chat from recipients
             onClose={() => setShareModal({ open: false, index: null })}
-            onSend={(recipient, msg) => {
-              setMessages(prev => [...prev, { role: 'user', content: `Transféré à ${recipient.name}: ${msg.type === 'image' ? '[image]' : msg.content}`, type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }]);
+            onSend={async (recipient, msg) => {
+              // Forward message to the selected recipient's conversation
+              try {
+                const forwardedContent = msg.type === 'image' ? '[Image transférée]' : `[Message transféré]: ${msg.content}`;
+
+                // Get conversation ID for the recipient
+                const recipientConversationId = conversations.get(recipient.modelId);
+
+                // Send the forwarded message via API
+                const response = await fetch('/api/messages', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    model_id: recipient.modelId,
+                    conversation_id: recipientConversationId,
+                    content: forwardedContent,
+                    content_type: 'text',
+                  }),
+                });
+
+                if (!response.ok) {
+                  throw new Error('Erreur lors du transfert');
+                }
+
+                const data = await response.json();
+
+                // Update conversation mapping if new conversation was created
+                if (data.conversation_id && !recipientConversationId) {
+                  setConversations(prev => new Map(prev).set(recipient.modelId, data.conversation_id));
+                  // Update chat list item ID
+                  setChatListItems(prev => prev.map(item =>
+                    item.modelId === recipient.modelId
+                      ? { ...item, id: data.conversation_id }
+                      : item
+                  ));
+                }
+
+                // Update last message in chat list for the recipient and re-sort
+                if (data.assistant_message) {
+                  setChatListItems(prev => {
+                    const updated = prev.map(item =>
+                      item.modelId === recipient.modelId
+                        ? {
+                            ...item,
+                            lastMessage: data.assistant_message.content?.substring(0, 30) + '...',
+                            lastAiResponseAt: data.assistant_message.created_at
+                          }
+                        : item
+                    );
+                    // Re-sort: most recent AI response first
+                    return updated.sort((a, b) => {
+                      if (!a.lastAiResponseAt && !b.lastAiResponseAt) return 0;
+                      if (!a.lastAiResponseAt) return 1;
+                      if (!b.lastAiResponseAt) return -1;
+                      return new Date(b.lastAiResponseAt).getTime() - new Date(a.lastAiResponseAt).getTime();
+                    });
+                  });
+                }
+
+                // Show success notification (add a temporary message in current chat)
+                const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                setMessages(prev => [...prev, {
+                  role: 'assistant' as const,
+                  content: `✓ Message transféré à ${recipient.name}`,
+                  type: 'text' as const,
+                  time: currentTime
+                }]);
+
+              } catch (error) {
+                console.error('Error forwarding message:', error);
+                const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                setMessages(prev => [...prev, {
+                  role: 'assistant' as const,
+                  content: `❌ Erreur lors du transfert du message`,
+                  type: 'text' as const,
+                  time: currentTime
+                }]);
+              }
+
               setShareModal({ open: false, index: null });
             }}
           />
