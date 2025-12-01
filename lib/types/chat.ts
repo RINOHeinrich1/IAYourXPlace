@@ -1,19 +1,28 @@
 // ============================================
 // AI Chat System TypeScript Types
 // Compatible with existing database schema
+// Aligned with admin-YourXplace AICharacter interface
 // ============================================
 
 // AI Model (from existing ai_models table) - represents an AI character
+// Core fields match admin-YourXplace/src/types/chat.d.ts AICharacter interface
 export interface AIModel {
   id: string;
   name: string;
-  description?: string;
+  // Core required fields (matching AICharacter from admin-YourXplace)
+  personality: string;
+  avatar: string; // Alias for avatar_url, matches admin-YourXplace naming
+  avatar_url?: string; // Kept for backward compatibility with database
+  description: string;
+  greetings: string[];
+  systemPrompt: string;
+  // Database metadata fields
   version?: string;
   status?: string;
-  personality?: string;
-  avatar_url?: string;
-  greetings?: string[];
-  systemPrompt?: string; 
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  // Extended profile fields (optional, for enhanced AI character customization)
   age?: number;
   ethnicities?: string[];
   hair_type?: string;
@@ -25,9 +34,6 @@ export interface AIModel {
   profession?: string[];
   sexual_preferences?: string[];
   voice?: string;
-  created_by?: string;
-  created_at: string;
-  updated_at: string;
 }
 
 // Alias for backward compatibility
@@ -142,13 +148,17 @@ export interface ConversationListItem {
 }
 
 // Create AI Model Request
+// Core fields are required (matching AICharacter from admin-YourXplace)
 export interface CreateAIModelRequest {
+  // Required core fields
   name: string;
-  description?: string;
-  personality?: string;
-  avatar_url?: string;
-  greetings?: string[];
-  systemPrompt?: string;
+  personality: string;
+  avatar: string; // Primary field for avatar (matches admin-YourXplace naming)
+  avatar_url?: string; // Backward compatibility with database column
+  description: string;
+  greetings: string[];
+  systemPrompt: string;
+  // Optional extended profile fields
   age?: number;
   ethnicities?: string[];
   hair_type?: string;
