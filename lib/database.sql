@@ -366,3 +366,45 @@ END $$;
 -- All changes are backward-compatible and do not affect existing data.
 -- ============================================
 
+
+-- ============================================
+-- FIX: Change conversations unique constraint
+-- The original schema has UNIQUE(model_id) which means only ONE user
+-- can have a conversation with any AI model globally.
+-- We need UNIQUE(sender_id, model_id) to allow each user to have
+-- their own conversation with each AI model.
+-- ============================================
+
+-- Drop the incorrect unique constraint on model_id alone (if it exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'conversations_model_id_key'
+    AND conrelid = 'public.conversations'::regclass
+  ) THEN
+    ALTER TABLE public.conversations DROP CONSTRAINT conversations_model_id_key;
+    RAISE NOTICE 'Dropped conversations_model_id_key constraint';
+  END IF;
+END $$;
+
+-- Create composite unique constraint on (sender_id, model_id)
+-- This allows each user to have one conversation per AI model
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'conversations_sender_model_unique'
+    AND conrelid = 'public.conversations'::regclass
+  ) THEN
+    ALTER TABLE public.conversations
+    ADD CONSTRAINT conversations_sender_model_unique
+    UNIQUE (sender_id, model_id);
+    RAISE NOTICE 'Created conversations_sender_model_unique constraint';
+  END IF;
+END $$;
+
+-- Create index for the composite key for better query performance
+CREATE INDEX IF NOT EXISTS idx_conversations_sender_model
+ON public.conversations(sender_id, model_id);
+
