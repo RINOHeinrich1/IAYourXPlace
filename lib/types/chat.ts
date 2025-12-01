@@ -65,7 +65,8 @@ export interface Conversation {
 export interface Message {
   id: string;
   conversation_id: string;
-  sender_id?: string; // Profile ID (null for AI messages)
+  sender_id?: string; // Profile ID for user messages (null for AI messages)
+  ai_sender_id?: string; // AI Model ID for AI messages (null for user messages)
   content?: string;
   attachment_url?: string;
   title?: string;
@@ -83,6 +84,11 @@ export interface Message {
   updated_at?: string;
   // Joined data
   reply_to?: Message;
+  ai_model?: {
+    id: string;
+    name: string;
+    avatar_url?: string;
+  };
 }
 
 // API Request/Response Types

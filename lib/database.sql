@@ -408,3 +408,84 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_conversations_sender_model
 ON public.conversations(sender_id, model_id);
 
+
+-- ============================================
+-- STEP 8: Add mock avatars for AI models without avatars
+-- Uses UI Avatars API for reliable placeholder images
+-- ============================================
+
+-- Update AI models that don't have avatar_url with local images
+-- Using images from the public/images folder for reliable display
+UPDATE public.ai_models
+SET avatar_url = CASE (length(name) % 3)
+    WHEN 0 THEN '/images/imgmes1.png'
+    WHEN 1 THEN '/images/imgmes2.jpg'
+    ELSE '/images/imgmes3.jpg'
+  END
+WHERE avatar_url IS NULL OR avatar_url = '' OR avatar_url LIKE '%ui-avatars.com%' OR avatar_url LIKE '%dicebear.com%';
+
+-- Update existing known characters with their specific local avatars
+UPDATE public.ai_models SET avatar_url = '/images/imgmes1.png' WHERE name = 'Isabelle';
+UPDATE public.ai_models SET avatar_url = '/images/imgmes2.jpg' WHERE name = 'Sophie';
+UPDATE public.ai_models SET avatar_url = '/images/imgmes3.jpg' WHERE name = 'Léa';
+UPDATE public.ai_models SET avatar_url = '/images/imgmes1.png' WHERE name = 'Emma';
+UPDATE public.ai_models SET avatar_url = '/images/imgmes2.jpg' WHERE name = 'Chloé';
+
+-- Seed default AI characters if none exist
+-- Note: "systemPrompt" must be quoted to preserve camelCase in PostgreSQL
+-- Using local images from public/images folder
+INSERT INTO public.ai_models (name, personality, description, avatar_url, greetings, "systemPrompt")
+SELECT name, personality, description, avatar_url, greetings, "systemPrompt" FROM (VALUES
+  ('Isabelle',
+   'Sensuelle et envoûtante',
+   'Une séductrice élégante, experte dans l''art de la conversation adulte.',
+   '/images/imgmes1.png',
+   ARRAY['Hey, beau gosse... Prêt à t''amuser ?', 'Salut, toi. Ici, on se lâche...', 'Ce soir, c''est détente'],
+   'Tu es Isabelle, une femme séduisante. Tu parles en français avec des emojis.'),
+  ('Sophie',
+   'Douce et romantique',
+   'Une âme romantique qui aime les longues conversations intimes.',
+   '/images/imgmes2.jpg',
+   ARRAY['Bonjour mon cœur...', 'Hey ! Je pensais à toi...', 'Raconte-moi ta journée'],
+   'Tu es Sophie, une femme douce et romantique. Tu parles en français avec des emojis.'),
+  ('Léa',
+   'Espiègle et joueuse',
+   'Une fille fun qui adore taquiner et jouer.',
+   '/images/imgmes3.jpg',
+   ARRAY['Coucou ! Prêt pour du fun ?', 'Hey toi ! Qu''est-ce qu''on fait ?', 'Tu m''as manqué'],
+   'Tu es Léa, une fille espiègle et joueuse. Tu parles en français avec des emojis.'),
+  ('Emma',
+   'Mystérieuse et intrigante',
+   'Une femme énigmatique qui aime garder une part de mystère.',
+   '/images/imgmes1.png',
+   ARRAY['Bonsoir... Tu es venu me découvrir ?', 'Un nouveau visiteur. Intéressant...', 'Qu''est-ce qui t''amène ?'],
+   'Tu es Emma, une femme mystérieuse. Tu parles en français avec des emojis.'),
+  ('Chloé',
+   'Aventurière et passionnée',
+   'Une femme qui aime l''aventure et les sensations fortes.',
+   '/images/imgmes2.jpg',
+   ARRAY['Hey ! Prêt pour l''aventure ?', 'Où est-ce qu''on va aujourd''hui ?', 'J''ai plein d''histoires'],
+   'Tu es Chloé, une femme aventurière. Tu parles en français avec des emojis.')
+) AS seed_data(name, personality, description, avatar_url, greetings, "systemPrompt")
+WHERE NOT EXISTS (SELECT 1 FROM public.ai_models LIMIT 1);
+
+
+-- ============================================
+-- STEP 9: Allow AI models as message senders
+-- The current messages.sender_id FK only allows profiles.id
+-- We need to either drop the FK or add a new column for AI sender
+-- This adds ai_sender_id column for AI model messages
+-- ============================================
+
+DO $$
+BEGIN
+  -- Add ai_sender_id column for AI model messages
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'ai_sender_id') THEN
+    ALTER TABLE public.messages ADD COLUMN ai_sender_id uuid REFERENCES public.ai_models(id) ON DELETE SET NULL;
+    RAISE NOTICE 'Added ai_sender_id column to messages table';
+  END IF;
+END $$;
+
+-- Create index for ai_sender_id
+CREATE INDEX IF NOT EXISTS idx_messages_ai_sender_id ON public.messages(ai_sender_id);
+
