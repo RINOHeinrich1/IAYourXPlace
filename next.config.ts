@@ -11,14 +11,20 @@ const nextConfig: NextConfig = {
                 port: '',
                 pathname: '/**',
             },
-            // 2. ⚠️ AJOUTEZ ICI LE(S) DOMAINE(S) DE VOTRE VRAIE API D'IA (par exemple, OpenAI, Google Cloud Storage, etc.)
-            // Exemple : Si vos images sont hébergées sur un service d'IA qui utilise 'storage.ia.com'
-            // {
-            //     protocol: 'https',
-            //     hostname: 'storage.ia.com',
-            //     port: '',
-            //     pathname: '/**',
-            // },
+            // 2. DiceBear Avatars API - for AI character avatars
+            {
+                protocol: 'https',
+                hostname: 'api.dicebear.com',
+                port: '',
+                pathname: '/**',
+            },
+            // 3. UI Avatars (legacy fallback)
+            {
+                protocol: 'https',
+                hostname: 'ui-avatars.com',
+                port: '',
+                pathname: '/**',
+            },
         ],
     },
 };

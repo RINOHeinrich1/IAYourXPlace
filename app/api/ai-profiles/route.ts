@@ -28,10 +28,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Add avatar alias for compatibility with admin-YourXplace interface
+    const modelsWithAvatar = (models || []).map((model: { avatar_url?: string }) => ({
+      ...model,
+      avatar: model.avatar_url 
+    }));
+
     // Return as 'profiles' for backward compatibility and 'models' for new code
     return NextResponse.json({
-      profiles: models || [],
-      models: models || []
+      profiles: modelsWithAvatar,
+      models: modelsWithAvatar
     });
   } catch (error) {
     console.error('Server error:', error);
@@ -52,13 +58,14 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
+      // Core required fields (matching AICharacter from admin-YourXplace)
       name,
+      personality,
+      avatar, 
+      avatar_url, 
       description,
-      personality, // text in existing schema
-      avatar_url,
       greetings = [],
-      systemPrompt, // camelCase in existing schema
-      // Extended columns (from migration)
+      systemPrompt,
       age,
       ethnicities = [],
       hair_type,
@@ -72,20 +79,36 @@ export async function POST(request: NextRequest) {
       voice,
     } = body;
 
+    // Validation of required fields
     if (!name?.trim()) {
       return NextResponse.json({ error: 'Le nom est requis' }, { status: 400 });
     }
+    if (!personality?.trim()) {
+      return NextResponse.json({ error: 'La personnalité est requise' }, { status: 400 });
+    }
+    if (!description?.trim()) {
+      return NextResponse.json({ error: 'La description est requise' }, { status: 400 });
+    }
+    if (!greetings || greetings.length === 0) {
+      return NextResponse.json({ error: 'Les salutations sont requises' }, { status: 400 });
+    }
+    if (!systemPrompt?.trim()) {
+      return NextResponse.json({ error: 'Le system prompt est requis' }, { status: 400 });
+    }
+
+    // Use avatar or avatar_url (avatar takes precedence for new interface)
+    const resolvedAvatarUrl = avatar || avatar_url;
 
     const { data: model, error } = await supabase
       .from('ai_models')
       .insert({
         name: name.trim(),
         description,
-        personality, // text field
-        avatar_url,
+        personality,
+        avatar_url: resolvedAvatarUrl, // Database column name
         greetings,
         systemPrompt,
-        // Extended columns
+        // Extended columns (optional)
         age,
         ethnicities,
         hair_type,
@@ -107,9 +130,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Add avatar alias for compatibility with admin-YourXplace interface
+    const modelWithAvatar = model ? {
+      ...model,
+      avatar: model.avatar_url 
+    } : model;
+
     return NextResponse.json({
-      profile: model, // backward compatibility
-      model
+      profile: modelWithAvatar, 
+      model: modelWithAvatar
     }, { status: 201 });
   } catch (error) {
     console.error('Server error:', error);
