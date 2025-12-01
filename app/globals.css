@@ -1,3 +1,7 @@
+
+
+
+
 @import "tailwindcss";
 
 :root {
@@ -38,4 +42,47 @@ body {
 /* Masquer la barre de défilement spécifiquement pour les webkit (Chrome, Safari) */
 .custom-scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+
+body::-webkit-scrollbar {
+    display: none;
+}
+
+body {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+
+
+
+@keyframes slideInRight {
+  0% {
+    transform: translateX(100%); /* hors écran à droite */
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0); /* position normale */
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%); /* repart hors écran à droite */
+    opacity: 0;
+  }
+}
+
+.animate-slideInRight {
+  animation: slideInRight 0.25s ease-out forwards;
+}
+
+.animate-slideOutRight {
+  animation: slideOutRight 0.25s ease-in forwards;
 }
