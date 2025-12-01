@@ -48,7 +48,8 @@ interface Message {
   type?: 'text' | 'image';
   time: string;
   reaction?: string;
-  reply?: { index: number; content: string; role: 'user' | 'assistant' } | undefined;
+  reply?: { id?: string; index?: number; content: string; role: 'user' | 'assistant' } | undefined;
+  reply_to_id?: string; // Database reference to parent message
   pinned?: boolean;
   removed?: boolean;
 }
@@ -85,41 +86,73 @@ export default function DiscuterPage() {
   const [undoStack, setUndoStack] = useState<Array<any>>([]);
 
   const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [replyRestored, setReplyRestored] = useState(false); // Track if we've restored from localStorage
 
   // Persist replyTo state in localStorage
   const REPLY_STORAGE_KEY = 'discuter_reply_to';
 
-  // Load replyTo from localStorage on mount
+  // Load replyTo from localStorage AFTER messages are loaded (run only once per conversation)
   useEffect(() => {
+    // Reset the restored flag when conversation changes
+    setReplyRestored(false);
+    setReplyTo(null);
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    // Only attempt to restore once messages are loaded and we haven't restored yet
+    if (replyRestored || isLoadingMessages || !selectedChatId || messages.length === 0) return;
+
     try {
       const stored = localStorage.getItem(REPLY_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         // Only restore if it's for the same conversation
-        if (parsed.conversationId === selectedChatId && typeof parsed.replyTo === 'number') {
-          setReplyTo(parsed.replyTo);
+        if (parsed.conversationId === selectedChatId) {
+          // Try to find the message by ID first (more reliable)
+          if (parsed.messageId) {
+            const foundIndex = messages.findIndex(m => m.id === parsed.messageId);
+            if (foundIndex !== -1) {
+              setReplyTo(foundIndex);
+              setReplyRestored(true);
+              return;
+            }
+          }
+          // Fallback to index if ID not found but index is valid
+          if (typeof parsed.replyTo === 'number' && parsed.replyTo < messages.length) {
+            setReplyTo(parsed.replyTo);
+            setReplyRestored(true);
+            return;
+          }
         }
       }
+      // Mark as restored even if nothing was found to avoid re-running
+      setReplyRestored(true);
     } catch (e) {
       console.error('Error loading replyTo from localStorage:', e);
+      setReplyRestored(true);
     }
-  }, [selectedChatId]);
+  }, [selectedChatId, isLoadingMessages, messages.length, replyRestored]);
 
-  // Save replyTo to localStorage when it changes
+  // Save replyTo to localStorage when it changes (but not during initial restore)
   useEffect(() => {
+    // Don't save during the initial restore phase
+    if (!replyRestored) return;
+
     try {
-      if (replyTo !== null && selectedChatId) {
+      if (replyTo !== null && selectedChatId && messages[replyTo]) {
         localStorage.setItem(REPLY_STORAGE_KEY, JSON.stringify({
           conversationId: selectedChatId,
-          replyTo: replyTo
+          replyTo: replyTo,
+          messageId: messages[replyTo].id || null, // Store message ID for reliable lookup
+          messageContent: messages[replyTo].content?.substring(0, 50) // Store preview for debugging
         }));
-      } else {
+      } else if (replyTo === null) {
         localStorage.removeItem(REPLY_STORAGE_KEY);
       }
     } catch (e) {
       console.error('Error saving replyTo to localStorage:', e);
     }
-  }, [replyTo, selectedChatId]);
+  }, [replyTo, selectedChatId, messages, replyRestored]);
 
   const clearReply = () => {
     setReplyTo(null);
@@ -238,6 +271,7 @@ export default function DiscuterPage() {
         const data = await res.json();
 
         if (data.messages && Array.isArray(data.messages)) {
+          // First pass: create messages with reply_to_id stored
           const loadedMessages: Message[] = data.messages.map((msg: any) => ({
             id: msg.id,
             role: msg.role as 'user' | 'assistant',
@@ -245,10 +279,33 @@ export default function DiscuterPage() {
             type: msg.content_type === 'image' ? 'image' : 'text',
             time: new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
             reaction: msg.reaction,
+            reply_to_id: msg.reply_to_id, // Store the database reference
             pinned: false,
             removed: msg.is_deleted,
           }));
-          setMessages(loadedMessages);
+
+          // Second pass: resolve reply references to build reply objects
+          const messagesWithReplies = loadedMessages.map((msg, idx) => {
+            if (msg.reply_to_id) {
+              // Find the parent message by ID
+              const parentIdx = loadedMessages.findIndex(m => m.id === msg.reply_to_id);
+              if (parentIdx !== -1) {
+                const parentMsg = loadedMessages[parentIdx];
+                return {
+                  ...msg,
+                  reply: {
+                    id: parentMsg.id,
+                    index: parentIdx,
+                    content: parentMsg.content,
+                    role: parentMsg.role,
+                  }
+                };
+              }
+            }
+            return msg;
+          });
+
+          setMessages(messagesWithReplies);
         }
       } catch (error) {
         console.error('Error loading messages:', error);
@@ -267,8 +324,26 @@ export default function DiscuterPage() {
     if (!input.trim() || isLoading || !activeChat) return;
 
     const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    const replyPayload = replyTo !== null ? { index: replyTo, content: messages[replyTo].content, role: messages[replyTo].role } : undefined;
-    const userMessage: Message = { role: 'user', content: input.trim(), type: 'text', time: currentTime, reply: replyPayload };
+
+    // Get the parent message ID for replies
+    const parentMessage = replyTo !== null ? messages[replyTo] : null;
+    const replyToMessageId = parentMessage?.id || null;
+
+    const replyPayload = parentMessage ? {
+      id: parentMessage.id,
+      index: replyTo !== null ? replyTo : undefined,
+      content: parentMessage.content,
+      role: parentMessage.role
+    } : undefined;
+
+    const userMessage: Message = {
+      role: 'user',
+      content: input.trim(),
+      type: 'text',
+      time: currentTime,
+      reply: replyPayload,
+      reply_to_id: replyToMessageId || undefined,
+    };
 
     // Optimistically add user message to UI
     setMessages(prev => [...prev, userMessage]);
@@ -288,6 +363,7 @@ export default function DiscuterPage() {
           conversation_id: conversationId,
           content: input.trim(),
           content_type: 'text',
+          reply_to_id: replyToMessageId, // Send parent message ID to database
         }),
       });
 
@@ -437,7 +513,9 @@ export default function DiscuterPage() {
     setOpenMenuIndex(null);
   };
 
-  const handleReply = (idx: number) => {
+  const handleReply = (idx: number, e?: React.MouseEvent) => {
+    // Prevent event bubbling that might cause state issues
+    e?.stopPropagation();
     // open the reply preview and set reply target
     setReplyTo(idx);
     setOpenMenuIndex(null);
@@ -775,7 +853,7 @@ export default function DiscuterPage() {
                             <div className="w-[160px] mx-auto flex flex-col ml-29 gap-1 p-2 rounded mt-2" style={{ background: "rgba(56,56,56,1)" }}>
                               <div className="text-left text-white text-[10px]">{msg.time}</div>
                               <div className="flex flex-col gap-1 text-sm mt-1">
-                                <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10" onClick={() => handleReply(origIdx)}>
+                                <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10" onClick={(e) => handleReply(origIdx, e)}>
                                   <Reply size={16} /><span>Répondre</span>
                                 </div>
                                 <div className="flex items-center gap-2 p-1 rounded-lg cursor-pointer hover:bg-white/10" onClick={() => handleShare(origIdx)}>
