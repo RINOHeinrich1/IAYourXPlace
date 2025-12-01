@@ -10,7 +10,40 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
 
+// Types for API data
+interface AIModel {
+  id: string;
+  name: string;
+  avatar_url?: string;
+  avatar?: string;
+  personality?: string;
+  description?: string;
+  systemPrompt?: string;
+}
+
+interface Conversation {
+  id: string;
+  model_id: string;
+  title?: string;
+  last_message_at?: string;
+  ai_model?: AIModel | AIModel[];
+  last_message?: {
+    content: string;
+    role: string;
+    created_at: string;
+  };
+}
+
+interface ChatListItem {
+  id: string; // conversation id
+  modelId: string; // AI model id
+  name: string;
+  lastMessage: string;
+  profileSrc: string;
+}
+
 interface Message {
+
     role: 'user' | 'assistant';
     content: string;
     type?: 'text' | 'image';
@@ -167,8 +200,66 @@ export default function DiscuterPage() {
     const handleShare = (idx: number) => {
         // open centered share modal for the selected message
         setShareModal({ open: true, index: idx });
+
         setOpenMenuIndex(null);
     };
+
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const page = document.getElementById('discuter-page');
+    if (page) {
+      page.style.overflowY = 'auto';
+    }
+  }, []);
+
+  useEffect(() => {
+    handleScroll();
+  }, [handleScroll]);
+
+  // Show loading state while fetching chats
+  if (isLoadingChats) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 size={48} className="animate-spin text-white/60" />
+          <p className="text-white/60">Chargement des conversations...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show message if no AI models available
+  if (chatListItems.length === 0) {
+    return (
+      <div className="min-h-screen bg-black text-white flex" id="discuter-page">
+        <Sidebar isCollapsed={isSidebarCollapsed} />
+        <main className="flex-1 flex flex-col items-center justify-center p-6" style={{ marginLeft: `${sidebarWidth}px` }}>
+          <h1 className="text-4xl font-bold mb-6">Discuter</h1>
+          <p className="text-white/60 text-lg">Aucun modèle IA disponible.</p>
+          <p className="text-white/40 text-sm mt-2">Créez un modèle IA pour commencer à discuter.</p>
+        </main>
+      </div>
+    );
+  }
+
+  const handleContextMenu = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    toggleMenu(index);
+  };
+
+  const handleReaction = (index: number, reaction: string) => {
+    setMessages(prev =>
+      prev.map((msg, i) =>
+        i === index
+          ? { ...msg, reaction }
+          : msg
+      )
+    );
+
 
     const handleRemoveForEveryone = (idx: number) => {
         // mark message as removed for everyone (keep in list but show placeholder)
@@ -192,6 +283,7 @@ export default function DiscuterPage() {
         setOpenMenuIndex(null);
     };
 
+
     const handleDelete = (idx: number) => {
         // remove a message locally and push to undo stack
         setMessages(prev => {
@@ -202,6 +294,7 @@ export default function DiscuterPage() {
         });
         setOpenMenuIndex(null);
     };
+
 
     const handleUndo = () => {
         // undo last action (only delete supported for now)
@@ -264,6 +357,7 @@ export default function DiscuterPage() {
             <img src="/icons/gift.png" alt="Cadeau" width={24} height={24} />
           </button> */}
 
+
                     {/* Bouton fermer réponse */}
                     <button
                         onClick={clearReply}
@@ -271,6 +365,7 @@ export default function DiscuterPage() {
                     >
                         <img src="/icons/close.png" alt="Fermer" width={20} height={20} />
                     </button>
+
                 </div>
             </div>
         );
@@ -325,6 +420,7 @@ export default function DiscuterPage() {
                 }}
             >
 
+
                 <div className="relative">
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -366,6 +462,7 @@ export default function DiscuterPage() {
                                     </div>
                                 </div>
                             ))}
+
                         </div>
                     </div>
 
@@ -590,6 +687,8 @@ export default function DiscuterPage() {
                     />
                 </div>
             </main>
+
+
 
         </div>
     );

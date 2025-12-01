@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         sender_id,
+        ai_sender_id,
         role,
         content,
         content_type,
@@ -55,7 +56,12 @@ export async function GET(request: NextRequest) {
         reaction,
         is_deleted,
         created_at,
-        updated_at
+        updated_at,
+        ai_model:ai_models!ai_sender_id (
+          id,
+          name,
+          avatar_url
+        )
       `)
       .eq('conversation_id', conversation_id)
       .or('is_deleted.is.null,is_deleted.eq.false') // Handle null or false
@@ -118,30 +124,48 @@ export async function POST(request: NextRequest) {
 
     let convId = conversation_id;
 
-    // If no conversation_id, create a new conversation
+    // If no conversation_id, find existing or create new conversation
     if (!convId && model_id) {
-      const { data: newConv, error: convError } = await supabase
+      // FIRST check if conversation already exists for this user + AI model
+      // This avoids hitting the unique constraint error
+      const { data: existing } = await supabase
         .from('conversations')
-        .insert({ sender_id: profileId, model_id })
         .select('id')
+        .eq('sender_id', profileId)
+        .eq('model_id', model_id)
         .single();
 
-      if (convError) {
-        // Check if conversation already exists (unique constraint)
-        const { data: existing } = await supabase
+      if (existing) {
+        // Use existing conversation
+        convId = existing.id;
+        console.log('[POST /api/messages] Using existing conversation:', convId);
+      } else {
+        // Create new conversation only if none exists
+        const { data: newConv, error: convError } = await supabase
           .from('conversations')
+          .insert({ sender_id: profileId, model_id })
           .select('id')
-          .eq('sender_id', profileId)
-          .eq('model_id', model_id)
           .single();
 
-        if (existing) {
-          convId = existing.id;
+        if (convError) {
+          console.error('[POST /api/messages] Error creating conversation:', convError);
+          // One more check in case of race condition
+          const { data: retryExisting } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('sender_id', profileId)
+            .eq('model_id', model_id)
+            .single();
+
+          if (retryExisting) {
+            convId = retryExisting.id;
+          } else {
+            return NextResponse.json({ error: convError.message }, { status: 500 });
+          }
         } else {
-          return NextResponse.json({ error: convError.message }, { status: 500 });
+          convId = newConv.id;
+          console.log('[POST /api/messages] Created new conversation:', convId);
         }
-      } else {
-        convId = newConv.id;
       }
     }
 
@@ -199,8 +223,9 @@ export async function POST(request: NextRequest) {
 
     // Build AI context
     // Handle the joined ai_model data (Supabase returns array for joins)
-    const aiModelArray = conversation.ai_model as unknown as { name: string; personality: string; systemPrompt?: string }[];
+    const aiModelArray = conversation.ai_model as unknown as { id: string; name: string; personality: string; systemPrompt?: string }[];
     const aiModel = aiModelArray?.[0];
+    const aiModelId = aiModel?.id;
 
     // Build system prompt from AI model data
     // Note: personality is a text field in existing schema (not array)
@@ -234,12 +259,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Save assistant message
-    // sender_id is null for AI messages (no user profile)
+    // ai_sender_id is the AI model's ID for AI messages
+    // sender_id remains null (reserved for human profiles)
     const { data: assistantMessage, error: assistantMsgError } = await supabase
       .from('messages')
       .insert({
         conversation_id: convId,
-        sender_id: null, // AI messages have no sender_id
+        sender_id: null, // Human sender (null for AI)
+        ai_sender_id: aiModelId, // AI model ID as sender
         role: 'assistant',
         content: assistantContent,
         content_type: 'text',

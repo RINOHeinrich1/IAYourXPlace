@@ -109,20 +109,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'model_id est requis' }, { status: 400 });
     }
 
-    // Check if conversation already exists for this user and AI model
-    // Note: existing schema has UNIQUE constraint on model_id, so we check by sender_id + model_id
+    // FIRST check if conversation already exists for this user and AI model
+    // This avoids hitting the unique constraint error on model_id
     const { data: existing } = await supabase
       .from('conversations')
-      .select('id')
+      .select(`
+        id,
+        title,
+        last_message_at,
+        is_archived,
+        is_pinned,
+        created_at,
+        model_id,
+        ai_model:ai_models (
+          id,
+          name,
+          avatar_url,
+          personality,
+          systemPrompt
+        )
+      `)
       .eq('sender_id', profileId)
       .eq('model_id', model_id)
       .single();
 
     if (existing) {
-      return NextResponse.json({ conversation: existing });
+      console.log('[POST /api/conversations] Returning existing conversation:', existing.id);
+      return NextResponse.json({
+        conversation: {
+          ...existing,
+          ai_profile: existing.ai_model,
+        }
+      });
     }
 
-    // Create new conversation
+    // Create new conversation only if none exists
     const { data: conversation, error } = await supabase
       .from('conversations')
       .insert({
@@ -149,9 +170,22 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating conversation:', error);
+      console.error('[POST /api/conversations] Error creating conversation:', error);
+      // One more check in case of race condition (another request created it)
+      const { data: retryExisting } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('sender_id', profileId)
+        .eq('model_id', model_id)
+        .single();
+
+      if (retryExisting) {
+        return NextResponse.json({ conversation: retryExisting });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    console.log('[POST /api/conversations] Created new conversation:', conversation.id);
 
     return NextResponse.json({
       conversation: {

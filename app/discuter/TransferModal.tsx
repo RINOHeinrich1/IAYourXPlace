@@ -11,7 +11,7 @@ interface Message {
 }
 
 interface ChatListItem {
-  id: number;
+  id: string | number;
   name: string;
   lastMessage: string;
   profileSrc: string;
