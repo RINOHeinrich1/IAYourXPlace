@@ -99,12 +99,12 @@ interface SelectionModalProps {
 }
 
 const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = ({
-  title,
+  title: _title,
   options,
   selected,
   onSelect,
   onClose,
-  isMultiSelect,
+  isMultiSelect: _isMultiSelect,
   modalType
 }) => {
 
@@ -338,10 +338,10 @@ if (modalType === "voice") {
 // --- PAGE PRINCIPALE (Avec logique et soumission) ---
 export default function FinalPage() {
   const router = useRouter();
-  const { modelData } = useModelStore();
+  const { modelData, saveStep } = useModelStore();
 
   const {
-    ethnicities = [], age = '', hairType = '', hairColor = '', eyeColor = '',
+    gender = 'femmes', ethnicities = [], age = '', hairType = '', hairColor = '', eyeColor = '',
     bodyType = '', chestSize = '', name: storedName = '',
     personality: storedPersonality = [], relationship: storedRelationship = [],
     profession: storedProfession = [], sexualPreferences: storedSexualPreferences = [],
@@ -384,7 +384,23 @@ export default function FinalPage() {
   const sexualPrefsOptions = ['Bondage', 'Fessée', 'Collier et Laisse', 'Dirty Talk', 'Punition', 'Jeu Anal', 'Jeu Oral', 'Cum Play', 'Creampie', 'Daddy Dominance', 'Éjaculation féminine', 'Edging', 'Obéissance', 'Contrôle', 'Inexpérience', 'Lent et Sensuel', 'Flirte', 'Jeu de séduction érotique', 'Câlin'];
   const voicesOptions = ['Voix 1', 'Voix 2', 'Voix 3', 'Voix 4', 'Voix 5', 'Voix 6', 'Voix 7', 'Voix 8', 'Voix 9'];
 
-  const optionsMap = {
+  type MultiSelectConfig = {
+    title: string;
+    options: string[];
+    state: string[];
+    setState: React.Dispatch<React.SetStateAction<string[]>>;
+    isMulti: true;
+  };
+
+  type SingleSelectConfig = {
+    title: string;
+    options: string[];
+    state: string | null;
+    setState: React.Dispatch<React.SetStateAction<string | null>>;
+    isMulti: false;
+  };
+
+  const optionsMap: Record<string, MultiSelectConfig | SingleSelectConfig> = {
     personality: { title: 'la Personnalité', options: personalitiesOptions, state: personality, setState: setPersonality, isMulti: true },
     relationship: { title: 'le Type de Relation', options: relationshipsOptions, state: relationship, setState: setRelationship, isMulti: true },
     profession: { title: 'la Profession', options: professionsOptions, state: profession, setState: setProfession, isMulti: true },
@@ -392,9 +408,9 @@ export default function FinalPage() {
     voice: { title: 'la Voix', options: voicesOptions, state: voice, setState: setVoice, isMulti: false },
   };
 
-  const handleModalSelect = (value: string, config: typeof optionsMap[keyof typeof optionsMap]) => {
+  const handleModalSelect = (value: string, config: MultiSelectConfig | SingleSelectConfig) => {
     if (config.isMulti) {
-      const currentState = config.state as string[];
+      const currentState = config.state;
       if (currentState.includes(value)) {
         config.setState(currentState.filter(v => v !== value));
       } else {
@@ -411,48 +427,70 @@ export default function FinalPage() {
     ethnicities.length > 0 && age && hairType && hairColor && eyeColor && bodyType && chestSize;
 
 
-  // --- FONCTION DE SOUMISSION CORRIGÉE ---
   const handleSubmit = async () => {
     if (!isFormValid) {
-      console.log('Données manquantes (y compris des étapes précédentes) :', {
-        ethnicities, age, hairType, hairColor, eyeColor, bodyType, chestSize,
-        name, personality, relationship, profession, sexualPreferences, voice
-      });
-      alert('Veuillez remplir tous les champs de toutes les étapes (y compris celles précédentes) avant de continuer.');
+      alert('Veuillez remplir tous les champs de toutes les étapes avant de continuer.');
       return;
     }
 
-    // Préparation des champs qui pourraient être des tableaux mais qui sont stockés comme des chaînes simples dans la DB.
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      alert('Vous devez être connecté pour créer un modèle IA.');
+      return;
+    }
+
+    // Convert arrays to comma-separated strings for DB storage
     const bodyTypeString = Array.isArray(bodyType) ? bodyType.join(', ') : bodyType;
     const chestSizeString = Array.isArray(chestSize) ? chestSize.join(', ') : chestSize;
+    const hairTypeString = Array.isArray(hairType) ? hairType.join(', ') : hairType;
+    const hairColorString = Array.isArray(hairColor) ? hairColor.join(', ') : hairColor;
+    const personalityString = Array.isArray(personality) ? personality.join(', ') : personality;
 
-    const aiData = {
-      // Données des étapes précédentes
-      ethnicities: ethnicities, // text[]
-      age: Number(age), // integer
-      hair_type: hairType, // text
-      hair_color: hairColor, // text
-      eye_color: eyeColor, // text
-      body_type: bodyTypeString, // text (chaîne simple)
-      chest_size: chestSizeString, // text (chaîne simple)
+    // Random mock avatar until real avatar generation is implemented
+    const avatarOptions = [
+      '/images/A.jpg', '/images/B.jpg', '/images/C.png', '/images/D.jpg',
+      '/images/E.jpg', '/images/F.jpg', '/images/G.jpg', '/images/H.jpg',
+      '/images/I.jpg', '/images/J.jpg', '/images/K.jpg', '/images/L.jpg', '/images/M.jpg',
+    ];
+    const randomAvatar = avatarOptions[Math.floor(Math.random() * avatarOptions.length)];
 
-      // Données de l'étape actuelle
-      name: name, // text
-      personality: personality, // text[]
-      relationship: relationship, // text[]
-      profession: profession, // text[]
-      sexual_preferences: sexualPreferences, // text[]
-      voice: voice, // text
+    const systemPrompt = `Tu es ${name}, une ${gender === 'femmes' ? 'femme' : 'homme'} de ${age} ans d'origine ${Array.isArray(ethnicities) ? ethnicities.join(' et ') : ethnicities}. Tu as les cheveux ${hairTypeString} de couleur ${hairColorString} et des yeux ${eyeColor}. Ta personnalité est ${personalityString}. Tu travailles comme ${Array.isArray(profession) ? profession.join(', ') : profession}. Tu es ${Array.isArray(relationship) ? relationship.join(', ') : relationship}. Tu parles avec une voix ${voice || 'naturelle'}.`;
+
+    const aiModelData = {
+      name: name.trim(),
+      description: `${name}, ${age} ans - ${personalityString}`,
+      personality: personalityString,
+      systemPrompt,
+      greetings: [`Salut ! Je suis ${name}, ravie de te rencontrer ! 💕`],
+      avatar_url: randomAvatar,
+      gender,
+      ethnicities,
+      age: Number(age),
+      hair_type: hairTypeString,
+      hair_color: hairColorString,
+      eye_color: eyeColor,
+      body_type: bodyTypeString,
+      chest_size: chestSizeString,
+      relationship,
+      profession,
+      sexual_preferences: sexualPreferences,
+      voice,
+      created_by: user.id,
+      status: 'active',
+      is_public: false,
     };
 
-    const { data, error } = await supabase.from('profiles').insert([aiData]).select();
+    const { data, error } = await supabase
+      .from('ai_models')
+      .insert([aiModelData])
+      .select()
+      .single();
 
     if (error) {
-      console.error('Erreur Supabase lors de l\'enregistrement :', error);
-      alert(`Erreur lors de l'enregistrement: ${error.message}. Vérifiez la console pour plus de détails.`);
+      console.error('Erreur Supabase:', error);
+      alert(`Erreur lors de l'enregistrement: ${error.message}`);
     } else {
-      console.log('Insertion réussie :', data);
-      // alert('Profil enregistré avec succès !');
+      saveStep({ createdModelId: data.id });
       router.push('/creer-modele/final');
     }
   };
@@ -553,7 +591,7 @@ export default function FinalPage() {
       {/* --- AFFICHAGE CONDITIONNEL DU MODAL --- */}
       {isModalOpen && currentConfig && (
         <SelectionModal
-          modalType={modalType}       // <-- Ajout ici
+          modalType={modalType ?? undefined}
           title={currentConfig.title}
           options={currentConfig.options}
           selected={currentConfig.state}

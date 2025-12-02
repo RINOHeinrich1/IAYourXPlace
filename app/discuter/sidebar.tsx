@@ -28,11 +28,11 @@ const InfoItem: React.FC<InfoItemProps> = ({ label, value }) => (
 // --- Navigation Items ---
 export const aiNavItems = [
   { name: 'Home', active: false, iconPath: '/images/home.png', href: '/ai-dashboard' },
-  { name: 'Discuter', active: true, iconPath: '/images/iconmes.png' },
-  { name: 'Collection', active: true, iconPath: '/images/colec.png', href: '/collection' },
-  { name: 'Générer', active: false, iconPath: '/images/chat.png' },
-  { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png' },
-  { name: 'Mes IA', active: false, iconPath: '/images/mesia.png' },
+  { name: 'Discuter', active: true, iconPath: '/images/iconmes.png', href: '/discuter' },
+  { name: 'Collection', active: false, iconPath: '/images/colec.png', href: '/collection' },
+  { name: 'Générer', active: false, iconPath: '/images/chat.png', href: '/generer' },
+  { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png', href: '/creer-modele' },
+  { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
 ];
 
 export const backItem = {

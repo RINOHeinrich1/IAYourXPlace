@@ -2,13 +2,13 @@
 
 import Image from 'next/image';
 import Link from 'next/link'; 
-import React, { useState } from 'react';
 
-
+// --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
-
-    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },  { name: 'Collection', active: true, iconPath: '/images/colec.png', href: '/collection' },
-    { name: 'Générer', active: true, iconPath: '/images/chat.png', href: '/generer' },
+    { name: 'Home', active: true, iconPath: '/images/home.png', href: '/ai-dashboard' },
+    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
+    { name: 'Collection', active: false, iconPath: '/images/colec.png', href: '/collection' },
+    { name: 'Générer', active: false, iconPath: '/images/chat.png', href: '/generer' },
     { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png', href: '/creer-modele' },
     { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
 ];
@@ -38,8 +38,8 @@ const aiCharacters = [
 
 const backItem = { 
     name: 'Revenir dans myXplace', 
-    iconPath: '/icons/back_arrow.png', // Icône de flèche arrière
-    href: '/', // Lien vers la page d'accueil
+    iconPath: '/icons/back_arrow.png',
+    href: '/', 
 };
 
 
@@ -52,7 +52,6 @@ const Sidebar = () => (
         
        <nav className="space-y-3">
             {aiNavItems.map((item) => {
-                // CORRECTION : Vérifie si l'item.name est 'Home' pour le mettre actif
                 const isActive = item.name === 'Home'; 
                 const classes = `flex items-center space-x-3 py-2 px-6 rounded-lg cursor-pointer
                     ${isActive 
@@ -79,7 +78,7 @@ const Sidebar = () => (
             {/* Élément "Revenir dans myXplace" */}
             <div className="pt-6">
                 <Link 
-                    href={backItem.href} // Retourne à la page d'accueil
+                    href={backItem.href} 
                     className={`w-full flex items-center space-x-3 py-2 px-6 transition-colors rounded-lg cursor-pointer  text-white hover:bg-red-600`}
                 >
                     <Image src={backItem.iconPath} alt="Back Icon" width={20} height={20} />
@@ -92,9 +91,7 @@ const Sidebar = () => (
 
 const Header = () => (
     <header className=" right-0 z-20 p-4 bg-black/80 backdrop-blur-sm h-[80px]">
-        {/* Conteneur principal utilisant flex et justify-between pour séparer les éléments */}
         <div className="flex flex-col justify-between items-start h-full">
-            {/* Ligne du haut : Laissez vide ou ajoutez des éléments pour aligner l'icône tout à droite */}
            <div className="w-full flex justify-end">
    <div 
         className="
@@ -118,7 +115,6 @@ const Header = () => (
 </div>
             {/* Ligne du bas : Titre aligné à gauche (par défaut) et centré verticalement par items-center */}
             <div className="flex items-center mt-8">
-                {/* Titre et état EN DIRECT */}
                 <h1 className="text-4xl font-bold text-red-600  ml-80">
                     Se lancer dans <span className=" text-white              /* Couleur du texte : Blanc */
         text-xl 
@@ -139,8 +135,6 @@ const Header = () => (
 
 // --- Composant Principal de la Page AI ---
 export default function AiDashboardPage() {
-
-
 return(
  <div className="min-h-screen bg-black text-white">
 <Sidebar />
@@ -173,10 +167,10 @@ return(
             className="absolute top-2 right-2 rounded-full z-10" 
         />
                   <h3 className="text-xl font-bold">{model.name}</h3>
-                 <Link href="/live-action">
-  <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
-</Link>
+                  <div className="flex -ml-17 space-x-1 -mt-3 text-sm text-white/80">
+                    <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
 
+                  </div>
                 </div>
               </div>
             ))}
