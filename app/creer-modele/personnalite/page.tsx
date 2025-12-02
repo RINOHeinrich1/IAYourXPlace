@@ -338,10 +338,10 @@ if (modalType === "voice") {
 // --- PAGE PRINCIPALE (Avec logique et soumission) ---
 export default function FinalPage() {
   const router = useRouter();
-  const { modelData } = useModelStore();
+  const { modelData, saveStep } = useModelStore();
 
   const {
-    ethnicities = [], age = '', hairType = '', hairColor = '', eyeColor = '',
+    gender = 'femmes', ethnicities = [], age = '', hairType = '', hairColor = '', eyeColor = '',
     bodyType = '', chestSize = '', name: storedName = '',
     personality: storedPersonality = [], relationship: storedRelationship = [],
     profession: storedProfession = [], sexualPreferences: storedSexualPreferences = [],
@@ -422,37 +422,70 @@ export default function FinalPage() {
       return;
     }
 
+    // Get current user from Supabase auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error('Erreur d\'authentification:', authError);
+      alert('Vous devez être connecté pour créer un modèle IA.');
+      return;
+    }
+
     // Préparation des champs qui pourraient être des tableaux mais qui sont stockés comme des chaînes simples dans la DB.
     const bodyTypeString = Array.isArray(bodyType) ? bodyType.join(', ') : bodyType;
     const chestSizeString = Array.isArray(chestSize) ? chestSize.join(', ') : chestSize;
+    const hairTypeString = Array.isArray(hairType) ? hairType.join(', ') : hairType;
+    const hairColorString = Array.isArray(hairColor) ? hairColor.join(', ') : hairColor;
+    const personalityString = Array.isArray(personality) ? personality.join(', ') : personality;
 
-    const aiData = {
-      // Données des étapes précédentes
+    // Generate a system prompt based on the AI model's personality
+    const systemPrompt = `Tu es ${name}, une ${gender === 'femmes' ? 'femme' : 'homme'} de ${age} ans d'origine ${Array.isArray(ethnicities) ? ethnicities.join(' et ') : ethnicities}. Tu as les cheveux ${hairTypeString} de couleur ${hairColorString} et des yeux ${eyeColor}. Ta personnalité est ${personalityString}. Tu travailles comme ${Array.isArray(profession) ? profession.join(', ') : profession}. Tu es ${Array.isArray(relationship) ? relationship.join(', ') : relationship}. Tu parles avec une voix ${voice || 'naturelle'}.`;
+
+    const aiModelData = {
+      // Core required fields
+      name: name.trim(),
+      description: `${name}, ${age} ans - ${personalityString}`,
+      personality: personalityString,
+      systemPrompt: systemPrompt,
+      greetings: [`Salut ! Je suis ${name}, ravie de te rencontrer ! 💕`],
+
+      // Gender
+      gender: gender,
+
+      // Physical attributes from previous steps
       ethnicities: ethnicities, // text[]
       age: Number(age), // integer
-      hair_type: hairType, // text
-      hair_color: hairColor, // text
+      hair_type: hairTypeString, // text
+      hair_color: hairColorString, // text
       eye_color: eyeColor, // text
-      body_type: bodyTypeString, // text (chaîne simple)
-      chest_size: chestSizeString, // text (chaîne simple)
+      body_type: bodyTypeString, // text
+      chest_size: chestSizeString, // text
 
-      // Données de l'étape actuelle
-      name: name, // text
-      personality: personality, // text[]
+      // Personality attributes from current step
       relationship: relationship, // text[]
       profession: profession, // text[]
       sexual_preferences: sexualPreferences, // text[]
       voice: voice, // text
+
+      // Ownership and status
+      created_by: user.id,
+      status: 'active',
+      is_public: false, // Private by default
     };
 
-    const { data, error } = await supabase.from('profiles').insert([aiData]).select();
+    const { data, error } = await supabase
+      .from('ai_models')
+      .insert([aiModelData])
+      .select()
+      .single();
 
     if (error) {
       console.error('Erreur Supabase lors de l\'enregistrement :', error);
       alert(`Erreur lors de l'enregistrement: ${error.message}. Vérifiez la console pour plus de détails.`);
     } else {
-      console.log('Insertion réussie :', data);
-      // alert('Profil enregistré avec succès !');
+      console.log('Modèle IA créé avec succès :', data);
+      // Store the created model ID in the store for use in the final page
+      saveStep({ createdModelId: data.id });
       router.push('/creer-modele/final');
     }
   };

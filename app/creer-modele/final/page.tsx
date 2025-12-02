@@ -5,8 +5,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
+import { useModelStore } from '../../../store/useModelStore';
 
-interface Profile {
+interface AIModelProfile {
+  id: string;
   name: string;
   age: number;
   ethnicities: string[];
@@ -15,11 +17,12 @@ interface Profile {
   eye_color: string;
   body_type: string;
   chest_size: string;
-  personality: string[];
+  personality: string;
   relationship: string[];
   profession: string[];
   sexual_preferences: string[];
   voice: string;
+  avatar_url?: string;
 }
 
 interface SidebarProps {
@@ -130,12 +133,13 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
 
 export default function SummaryPage() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<AIModelProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'appearance' | 'personality'>('appearance');
 
   const router = useRouter();
   const currentPath = router.pathname || '';
+  const { modelData } = useModelStore();
 
   const profileImageUrl = '/images/cheuveux10.png';
 
@@ -154,38 +158,81 @@ export default function SummaryPage() {
   };
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchAIModel = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from<Profile>('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1);
 
-      if (error) console.error('Erreur Supabase :', error);
-      else if (data && data.length > 0) setProfile(data[0]);
-      else
+      // Get the created model ID from the store, or fetch the latest one
+      const createdModelId = modelData?.createdModelId;
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        console.error('User not authenticated');
+        setLoading(false);
+        return;
+      }
+
+      let query = supabase
+        .from('ai_models')
+        .select('*');
+
+      if (createdModelId) {
+        // Fetch the specific model that was just created
+        query = query.eq('id', createdModelId);
+      } else {
+        // Fallback: fetch the latest model created by this user
+        query = query
+          .eq('created_by', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Erreur Supabase :', error);
+      } else if (data && data.length > 0) {
+        const aiModel = data[0];
+        // Convert personality string to array if needed for display
+        const personalityArray = typeof aiModel.personality === 'string'
+          ? aiModel.personality.split(', ')
+          : (aiModel.personality || []);
+
         setProfile({
-          name: 'Elizabeth Garcia',
-          age: 22,
-          ethnicities: ['Occidental'],
-          hair_type: 'Lisse',
-          hair_color: 'Rose',
-          eye_color: 'Bleu',
-          body_type: 'Moyenne',
-          chest_size: 'Forte (D)',
-          personality: ['Ambitieuse', 'Créative', 'Joyeuse'],
-          relationship: ['Célibataire'],
-          profession: ['Étudiante'],
-          sexual_preferences: ['Hétérosexuelle'],
-          voice: 'Femme chaleureuse',
-        } as Profile);
+          ...aiModel,
+          personality: aiModel.personality, // Keep as string for display
+          // Ensure arrays are properly set
+          ethnicities: aiModel.ethnicities || [],
+          relationship: aiModel.relationship || [],
+          profession: aiModel.profession || [],
+          sexual_preferences: aiModel.sexual_preferences || [],
+        });
+      } else {
+        // No model found, use fallback data from store
+        setProfile({
+          id: '',
+          name: modelData?.name || 'Elizabeth Garcia',
+          age: modelData?.age || 22,
+          ethnicities: modelData?.ethnicities || ['Occidental'],
+          hair_type: Array.isArray(modelData?.hairType) ? modelData.hairType.join(', ') : (modelData?.hairType || 'Lisse'),
+          hair_color: Array.isArray(modelData?.hairColor) ? modelData.hairColor.join(', ') : (modelData?.hairColor || 'Rose'),
+          eye_color: modelData?.eyeColor || 'Bleu',
+          body_type: Array.isArray(modelData?.bodyType) ? modelData.bodyType.join(', ') : (modelData?.bodyType || 'Moyenne'),
+          chest_size: Array.isArray(modelData?.chestSize) ? modelData.chestSize.join(', ') : (modelData?.chestSize || 'Fort'),
+          personality: Array.isArray(modelData?.personality) ? modelData.personality.join(', ') : 'Ambitieuse, Créative',
+          relationship: modelData?.relationship || ['Célibataire'],
+          profession: modelData?.profession || ['Étudiante'],
+          sexual_preferences: modelData?.sexualPreferences || [],
+          voice: modelData?.voice || 'Voix 1',
+        });
+      }
 
       setLoading(false);
     };
 
-    fetchProfile();
-  }, []);
+    fetchAIModel();
+  }, [modelData?.createdModelId]);
 
   if (loading)
     return <p className="text-center p-10 bg-black text-white min-h-screen">Chargement...</p>;
@@ -264,12 +311,12 @@ export default function SummaryPage() {
 />
 
   <ProfileCard
-      label="Type de yeux"
-      value={profile.eye_type || 'N/A'}
+      label="Couleur des yeux"
+      value={profile.eye_color || 'N/A'}
       size="small"
       bgImage="/images/yeux1.png" // image de fond spécifique pour le type
       showIcon={false}
-    /> 
+    />
     <ProfileCard 
       label="Type de corps" 
       value={profile.body_type} 
@@ -317,7 +364,7 @@ export default function SummaryPage() {
    
     <ProfileCard
       label="Personnalité"
-      value={profile.personality.join(', ')}
+      value={typeof profile.personality === 'string' ? profile.personality : (profile.personality?.join(', ') || 'N/A')}
       isHighlighted
       size="small"
       showIcon={false}
@@ -339,7 +386,7 @@ export default function SummaryPage() {
     />
     <ProfileCard
       label="Penchants sexuels"
-      value={profile.sexual_preferences.join(', ')}
+      value={Array.isArray(profile.sexual_preferences) ? profile.sexual_preferences.join(', ') : (profile.sexual_preferences || 'N/A')}
       size="small"
       showIcon={false}
       bgColor="radial-gradient(80.88% 649.74% at 25.37% 25.74%, #0C0C0C 0%, #875555 100%)"

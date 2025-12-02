@@ -60,46 +60,92 @@ const Sidebar = () => (
   </div>
 );
 
-interface Profile {
-  id: number;
+interface AIModel {
+  id: string;
   name: string;
   age: number;
+  gender: string;
   ethnicities: string[];
   hair_type: string;
   hair_color: string;
   eye_color: string;
   body_type: string;
   chest_size: string;
-  personality: string[];
+  personality: string;
   relationship: string[];
   profession: string[];
   sexual_preferences: string[];
   voice: string;
-  imagePath?: string;
+  avatar_url?: string;
   created_at: string;
+  created_by: string;
+  status: string;
 }
 
 export default function MesIA() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [aiModels, setAiModels] = useState<AIModel[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProfiles = async () => {
-      const { data, error } = await supabase.from<Profile>('profiles').select('*').order('created_at', { ascending: false });
-      if (error) console.error('Erreur Supabase:', error);
-      else if (data) setProfiles(data);
+    const fetchAIModels = async () => {
+      setLoading(true);
+
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        console.error('Erreur d\'authentification:', authError);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch AI models created by the current user
+      const { data, error } = await supabase
+        .from('ai_models')
+        .select('*')
+        .eq('created_by', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erreur Supabase:', error);
+      } else if (data) {
+        setAiModels(data);
+      }
+
+      setLoading(false);
     };
-    fetchProfiles();
+
+    fetchAIModels();
   }, []);
 
-  const generateDescription = (profile: Profile) => {
-    // Création automatique d'une phrase à partir des champs
-    return `${profile.name}, ${profile.age} ans, ${profile.ethnicities.join(', ')}. 
-    Elle a les cheveux ${profile.hair_type} de couleur ${profile.hair_color} et des yeux ${profile.eye_color}. 
-    Son corps est ${profile.body_type} avec une poitrine ${profile.chest_size}. 
-    Elle est ${profile.personality.join(', ')} et intéressée par ${profile.sexual_preferences.join(', ')}. 
-    Profession(s): ${profile.profession.join(', ')}. Relation(s) actuelle(s): ${profile.relationship.join(', ')}. 
-    Voix: ${profile.voice}.`;
+  const generateDescription = (model: AIModel) => {
+    // Helper to safely join arrays or return string
+    const safeJoin = (value: string | string[] | undefined, fallback = 'N/A') => {
+      if (Array.isArray(value)) return value.join(', ');
+      if (typeof value === 'string') return value;
+      return fallback;
+    };
+
+    const genderText = model.gender === 'femmes' ? 'Elle' : 'Il';
+    const genderPossessive = model.gender === 'femmes' ? 'Son' : 'Son';
+
+    return `${model.name}, ${model.age} ans, ${safeJoin(model.ethnicities)}.
+    ${genderText} a les cheveux ${model.hair_type || 'N/A'} de couleur ${model.hair_color || 'N/A'} et des yeux ${model.eye_color || 'N/A'}.
+    ${genderPossessive} corps est ${model.body_type || 'N/A'}.
+    ${genderText} est ${safeJoin(model.personality)}.
+    Profession(s): ${safeJoin(model.profession)}. Relation(s): ${safeJoin(model.relationship)}.`;
   };
+
+  if (loading) {
+    return (
+      <div className="flex">
+        <Sidebar />
+        <div className="flex-1 ml-77 p-8 text-white bg-black min-h-screen flex items-center justify-center">
+          <p className="text-xl">Chargement de vos modèles IA...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex">
@@ -108,7 +154,7 @@ export default function MesIA() {
       <div className="flex-1 ml-77 p-8 text-white bg-black min-h-screen">
         <div className="flex justify-between items-center mb-10">
           <h1 className="text-white text-4xl font-extrabold tracking-wide">
-            Mon <span className="text-red-600">IA</span>
+            Mes <span className="text-red-600">IA</span>
           </h1>
           <div className="flex items-center justify-center w-[45px] h-[45px] rounded-full border border-white bg-white/10">
             <Image src="/images/iconuser.png" alt="User Icon" width={20} height={20} />
@@ -127,33 +173,48 @@ export default function MesIA() {
           </Link>
 
           {/* Affichage IA depuis Supabase */}
-          {profiles.map((profile) => (
-            <div key={profile.id} className="relative w-64 h-72 bg-white rounded-2xl overflow-hidden shadow-2xl">
-              {profile.imagePath && (
-                <Image
-                  src={profile.imagePath}
-                  alt={profile.name}
-                  layout="fill"
-                  objectFit="cover"
-                  className="absolute z-0"
-                  style={{ filter: 'brightness(0.95)' }}
-                />
-              )}
+          {aiModels.map((model) => (
+            <Link href={`/discuter?modelId=${model.id}`} key={model.id} className="block">
+              <div className="relative w-64 h-72 bg-gray-800 rounded-2xl overflow-hidden shadow-2xl cursor-pointer hover:ring-2 hover:ring-red-500 transition-all">
+                {model.avatar_url ? (
+                  <Image
+                    src={model.avatar_url}
+                    alt={model.name}
+                    fill
+                    className="object-cover absolute z-0"
+                    style={{ filter: 'brightness(0.95)' }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-red-600/30 to-purple-600/30 z-0" />
+                )}
 
-              <div className="absolute top-4 right-4 z-10 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:bg-red-700 transition-colors">
-                <Image src="/icons/chat.png" alt="Discuter" width={38} height={18} />
-              </div>
+                <div className="absolute top-4 right-4 z-10 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:bg-red-700 transition-colors">
+                  <Image src="/icons/chat.png" alt="Discuter" width={38} height={18} />
+                </div>
 
-              <div
-                className="absolute bottom-0 left-0 w-full p-3 z-10"
-                style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%)' }}
-              >
-                <h2 className="text-white text-lg font-bold mb-1">{profile.name}</h2>
-                <p className="text-gray-200 text-sm mb-1">{profile.age} ans</p>
-                <p className="text-white text-xs leading-snug">{generateDescription(profile)}</p>
+                <div
+                  className="absolute bottom-0 left-0 w-full p-3 z-10"
+                  style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 100%)' }}
+                >
+                  <h2 className="text-white text-lg font-bold mb-1">{model.name}</h2>
+                  <p className="text-gray-200 text-sm mb-1">{model.age} ans</p>
+                  <p className="text-white text-xs leading-snug line-clamp-3">{generateDescription(model)}</p>
+                </div>
               </div>
-            </div>
+            </Link>
           ))}
+
+          {/* Message si aucun modèle */}
+          {aiModels.length === 0 && (
+            <div className="w-full text-center py-10">
+              <p className="text-gray-400 text-lg">
+                Vous n&apos;avez pas encore créé de modèle IA.
+              </p>
+              <p className="text-gray-500 text-sm mt-2">
+                Cliquez sur &quot;Créer une nouvelle IA&quot; pour commencer !
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
