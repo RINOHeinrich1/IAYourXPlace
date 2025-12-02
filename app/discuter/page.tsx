@@ -35,7 +35,7 @@ interface Conversation {
 }
 
 interface ChatListItem {
-  id: string; // conversation id
+  id: number; // conversation id - changé de string à number pour correspondre aux données
   modelId: string; // AI model id
   name: string;
   lastMessage: string;
@@ -43,21 +43,20 @@ interface ChatListItem {
 }
 
 interface Message {
-
-    role: 'user' | 'assistant';
-    content: string;
-    type?: 'text' | 'image';
-    time: string;
-    reaction?: string;
-    reply?: { index: number; content: string; role: 'user' | 'assistant' } | undefined;
-    pinned?: boolean;
-    removed?: boolean;
+  role: 'user' | 'assistant';
+  content: string;
+  type?: 'text' | 'image';
+  time: string;
+  reaction?: string;
+  reply?: { index: number; content: string; role: 'user' | 'assistant' } | undefined;
+  pinned?: boolean;
+  removed?: boolean;
 }
 
-const chatListItems = [
-    { id: 1, name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png' },
-    { id: 2, name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg' },
-    { id: 3, name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg' },
+const chatListItems: ChatListItem[] = [
+    { id: 1, name: 'Elizabeth Garcia', lastMessage: 'vous: Hello', profileSrc: '/images/imgmes1.png', modelId: '1' },
+    { id: 2, name: 'Nelly rn (1)', lastMessage: 'Hi honey 🍯', profileSrc: '/images/imgmes2.jpg', modelId: '2' },
+    { id: 3, name: 'Nelly rn (2)', lastMessage: 'vous: Hello girl', profileSrc: '/images/imgmes3.jpg', modelId: '3' },
 ];
 
 export default function DiscuterPage() {
@@ -69,7 +68,7 @@ export default function DiscuterPage() {
     const [selectedChatId, setSelectedChatId] = useState(chatListItems[0].id);
     const activeChat = chatListItems.find(chat => chat.id === selectedChatId);
 
-    //   usericon
+    // usericon
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const [messages, setMessages] = useState<Message[]>([]);
@@ -85,16 +84,18 @@ export default function DiscuterPage() {
     const [shareModal, setShareModal] = useState<{ open: boolean; index: number | null }>({ open: false, index: null });
     const [undoStack, setUndoStack] = useState<Array<any>>([]);
 
-    //   magicpopup
+    // magicpopup
     const [showMagicPopup, setShowMagicPopup] = useState(false);
 
-
-
+    // reply state
     const [replyTo, setReplyTo] = useState<number | null>(null);
     const clearReply = () => setReplyTo(null);
 
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    useEffect(() => { scrollToBottom(); }, [messages]);
+    
+    useEffect(() => { 
+        scrollToBottom(); 
+    }, [messages]);
 
     const sendMessage = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -102,8 +103,19 @@ export default function DiscuterPage() {
 
         const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         // attach reply info into the message payload when replying
-        const replyPayload = replyTo !== null ? { index: replyTo, content: messages[replyTo].content, role: messages[replyTo].role } : undefined;
-        const userMessage: Message & { reply?: any } = { role: 'user', content: input.trim(), type: 'text', time: currentTime, reply: replyPayload };
+        const replyPayload = replyTo !== null ? { 
+            index: replyTo, 
+            content: messages[replyTo]?.content || '', 
+            role: messages[replyTo]?.role || 'user' 
+        } : undefined;
+        
+        const userMessage: Message = { 
+            role: 'user', 
+            content: input.trim(), 
+            type: 'text', 
+            time: currentTime, 
+            reply: replyPayload 
+        };
 
         setMessages(prev => [...prev, userMessage]);
         setInput('');
@@ -140,14 +152,25 @@ export default function DiscuterPage() {
                 ]);
             } else {
                 setMessages(prev => [
-                    ...prev,
-                    { role: 'assistant', content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", type: 'text', time: currentTime, reply: replyPayload }
+                    ...prev, 
+                    { 
+                        role: 'assistant', 
+                        content: "⚠️ Je n'ai pas reçu de réponse valide de l'IA.", 
+                        type: 'text', 
+                        time: currentTime, 
+                        reply: replyPayload 
+                    }
                 ]);
             }
         } catch {
             setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: "💥 Erreur réseau ou serveur.", type: 'text', time: currentTime }
+                ...prev, 
+                { 
+                    role: 'assistant', 
+                    content: "💥 Erreur réseau ou serveur.", 
+                    type: 'text', 
+                    time: currentTime 
+                }
             ]);
         } finally {
             setIsLoading(false);
@@ -200,66 +223,8 @@ export default function DiscuterPage() {
     const handleShare = (idx: number) => {
         // open centered share modal for the selected message
         setShareModal({ open: true, index: idx });
-
         setOpenMenuIndex(null);
     };
-
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleScroll = useCallback(() => {
-    const page = document.getElementById('discuter-page');
-    if (page) {
-      page.style.overflowY = 'auto';
-    }
-  }, []);
-
-  useEffect(() => {
-    handleScroll();
-  }, [handleScroll]);
-
-  // Show loading state while fetching chats
-  if (isLoadingChats) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 size={48} className="animate-spin text-white/60" />
-          <p className="text-white/60">Chargement des conversations...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show message if no AI models available
-  if (chatListItems.length === 0) {
-    return (
-      <div className="min-h-screen bg-black text-white flex" id="discuter-page">
-        <Sidebar isCollapsed={isSidebarCollapsed} />
-        <main className="flex-1 flex flex-col items-center justify-center p-6" style={{ marginLeft: `${sidebarWidth}px` }}>
-          <h1 className="text-4xl font-bold mb-6">Discuter</h1>
-          <p className="text-white/60 text-lg">Aucun modèle IA disponible.</p>
-          <p className="text-white/40 text-sm mt-2">Créez un modèle IA pour commencer à discuter.</p>
-        </main>
-      </div>
-    );
-  }
-
-  const handleContextMenu = (e: React.MouseEvent, index: number) => {
-    e.preventDefault();
-    toggleMenu(index);
-  };
-
-  const handleReaction = (index: number, reaction: string) => {
-    setMessages(prev =>
-      prev.map((msg, i) =>
-        i === index
-          ? { ...msg, reaction }
-          : msg
-      )
-    );
-
 
     const handleRemoveForEveryone = (idx: number) => {
         // mark message as removed for everyone (keep in list but show placeholder)
@@ -283,7 +248,6 @@ export default function DiscuterPage() {
         setOpenMenuIndex(null);
     };
 
-
     const handleDelete = (idx: number) => {
         // remove a message locally and push to undo stack
         setMessages(prev => {
@@ -294,7 +258,6 @@ export default function DiscuterPage() {
         });
         setOpenMenuIndex(null);
     };
-
 
     const handleUndo = () => {
         // undo last action (only delete supported for now)
@@ -324,11 +287,24 @@ export default function DiscuterPage() {
         setOpenMenuIndex(null);
     };
 
+    const handleScroll = useCallback(() => {
+        const page = document.getElementById('discuter-page');
+        if (page) {
+            page.style.overflowY = 'auto';
+        }
+    }, []);
+
+    useEffect(() => {
+        handleScroll();
+    }, [handleScroll]);
+
     const ReplyPreview = () => {
         if (replyTo === null) return null;
         const repliedMessage = messages[replyTo];
+        if (!repliedMessage) return null;
+        
         const isMe = repliedMessage.role === 'user';
-        const repliedToName = isMe ? "vous-même" : activeChat.name;
+        const repliedToName = isMe ? "vous-même" : activeChat?.name || '';
 
         return (
             <div
@@ -337,7 +313,6 @@ export default function DiscuterPage() {
                     background: 'linear-gradient(0deg, rgba(16,16,16,0.9) 0%, rgba(30,30,30,0.9) 100%)'
                 }}
             >
-
                 {/* Zone texte de réponse */}
                 <div className="flex flex-col overflow-hidden w-full h-full justify-center">
                     <span className={`font-semibold text-sm ${isMe ? '' : ''}`}>
@@ -350,14 +325,6 @@ export default function DiscuterPage() {
 
                 {/* Boutons micro + cadeau */}
                 <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                    {/* <button className="p-2 rounded-full hover:bg-white/10 transition">
-            <img src="/icons/micro.png" alt="Micro" width={24} height={24} />
-          </button>
-          <button className="p-2 rounded-full hover:bg-white/10 transition">
-            <img src="/icons/gift.png" alt="Cadeau" width={24} height={24} />
-          </button> */}
-
-
                     {/* Bouton fermer réponse */}
                     <button
                         onClick={clearReply}
@@ -365,34 +332,10 @@ export default function DiscuterPage() {
                     >
                         <img src="/icons/close.png" alt="Fermer" width={20} height={20} />
                     </button>
-
                 </div>
             </div>
         );
-
-
     };
-
-    const handleScroll = () => {
-        const page = document.getElementById('discuter-page');
-        if (page) {
-            page.style.overflowY = 'auto';
-        }
-    };
-
-    useEffect(() => {
-        handleScroll();
-    }, [/* dependencies if any */]);
-
-    // compute pinned and non-pinned indices (keep original array order and indices)
-    const pinnedIndices = messages
-        .map((m, i) => (m.pinned ? i : -1))
-        .filter(i => i >= 0);
-
-    const otherIndices = messages
-        .map((m, i) => (!m.pinned ? i : -1))
-        .filter(i => i >= 0);
-
 
     const handleResetChat = () => {
         console.log('Chat réinitialisé');
@@ -404,13 +347,20 @@ export default function DiscuterPage() {
         // Ta logique pour supprimer le chat
     };
 
+    // compute pinned and non-pinned indices (keep original array order and indices)
+    const pinnedIndices = messages
+        .map((m, i) => (m.pinned ? i : -1))
+        .filter(i => i >= 0);
+
+    const otherIndices = messages
+        .map((m, i) => (!m.pinned ? i : -1))
+        .filter(i => i >= 0);
+
     return (
         <div className="min-h-screen bg-black text-white flex" id="discuter-page">
             {/* Sidebar */}
             <Sidebar isCollapsed={isSidebarCollapsed} />
-            {/* Ici le DropdownMenu */}
-
-
+            
             {/* Contenu principal */}
             <main
                 className={`flex-1 flex flex-col p-6 transition-all duration-300 ${isSidebarCollapsed ? 'pr-0' : ''}`}
@@ -419,8 +369,6 @@ export default function DiscuterPage() {
                     minWidth: 0 // ← important pour empêcher le shrink quand scrollbar apparaît
                 }}
             >
-
-
                 <div className="relative">
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -433,7 +381,6 @@ export default function DiscuterPage() {
 
                     <UserMenuDropdown isOpen={isMenuOpen} />
                 </div>
-
 
                 <h1 className="text-4xl font-bold mt-22 mb-6">Discuter</h1>
 
@@ -462,7 +409,6 @@ export default function DiscuterPage() {
                                     </div>
                                 </div>
                             ))}
-
                         </div>
                     </div>
 
@@ -477,7 +423,6 @@ export default function DiscuterPage() {
                                 transition: 'width 0.3s ease',
                             }}
                         >
-
                             {/* Header discussion */}
                             <div className="flex items-center justify-between mb-4">
                                 <img src="/images/imgmes1.png" className="w-14 h-14 rounded-full object-cover" alt="profile" />
@@ -489,7 +434,6 @@ export default function DiscuterPage() {
                                             alt="magic"
                                             onClick={() => setShowMagicPopup(!showMagicPopup)}
                                         />
-
                                         <MagicPopup isOpen={showMagicPopup} />
                                     </div>
 
@@ -500,7 +444,6 @@ export default function DiscuterPage() {
                                                 handleDeleteChat={handleDeleteChat}
                                             />
                                         </div>
-                                        {/* ... Le menu qui s'affiche/se cache selon isMenuOpen ... */}
                                     </div>
                                     <Image
                                         // swapped mapping: when sidebar is collapsed (mini) show vector.png, when expanded show vector-close.png
@@ -512,7 +455,6 @@ export default function DiscuterPage() {
                                         onClick={toggleSidebar}
                                     />
                                 </div>
-
                             </div>
                             <div className="w-full h-px bg-white/20 mt-4 mb-4"></div>
 
@@ -528,8 +470,8 @@ export default function DiscuterPage() {
                                             {!isMe && <img src="/images/imgmes1.png" className="w-12 h-12 rounded-full object-cover mr-2" alt="assistant" />}
                                             <div className="relative max-w-[320px]">
                                                 <div className={`px-4 py-2 rounded-2xl cursor-pointer border border-yellow-400 bg-yellow-100/5 flex items-center gap-3`}>
-                                                    <div className="w-12 h-12 bg-[#111] rounded-md flex items-center justify-center mr-2">{/* place pour image */}
-                                                        {/* image placeholder - user can add later */}
+                                                    <div className="w-12 h-12 bg-[#111] rounded-md flex items-center justify-center mr-2">
+                                                        {/* place pour image */}
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <div className="flex items-center gap-2 text-sm text-yellow-300 font-semibold"><Pin size={14} /> <span>Message épinglé</span></div>
@@ -537,7 +479,6 @@ export default function DiscuterPage() {
                                                     </div>
                                                 </div>
                                             </div>
-                                            {/* {isMe && <img src="/images/user.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />} */}
                                         </div>
                                     );
                                 })}
@@ -547,16 +488,16 @@ export default function DiscuterPage() {
                                     const msg = messages[origIdx];
                                     const isMe = msg.role === "user";
                                     const isMenuOpen = openMenuIndex === origIdx;
+                                    
                                     return (
                                         <div key={origIdx} className={`flex mb-2 ${isMe ? "justify-end" : "justify-start"}`}>
                                             {!isMe && <img src="/images/imgmes1.png" className="w-12 h-12 rounded-full object-cover mr-2" alt="assistant" />}
                                             <div className="relative w-auto max-w-[380px]">
-
                                                 <div onContextMenu={(e) => handleContextMenu(e, origIdx)} onClick={() => toggleMenu(origIdx)} className={`px-4 py-2 rounded-2xl text-white cursor-pointer`} style={{ background: isMe ? "rgba(23,23,23,1)" : "rgba(98,98,98,1)" }}>
                                                     {/* if this message is a reply to another message, show a small inline reply preview */}
                                                     {msg.reply && (
                                                         <div className="mb-2 p-2 rounded-lg bg-black/40 border border-white/5 text-xs max-w-[270px] overflow-hidden text-ellipsis">
-                                                            <div className={`font-semibold ${msg.reply.role === 'user' ? 'text-green-300' : 'text-blue-300'}`}>{msg.reply.role === 'user' ? 'vous' : activeChat.name}</div>
+                                                            <div className={`font-semibold ${msg.reply.role === 'user' ? 'text-green-300' : 'text-blue-300'}`}>{msg.reply.role === 'user' ? 'vous' : activeChat?.name || 'AI'}</div>
                                                             <div className="text-gray-300 truncate text-sm mt-1">{msg.reply.content}</div>
                                                         </div>
                                                     )}
@@ -575,7 +516,6 @@ export default function DiscuterPage() {
                                                         <span className="text-2xl">{msg.reaction}</span>
                                                     </div>
                                                 )}
-
 
                                                 {/* Le menu contextuel ne s'affiche que si openMenuIndex === origIdx (clic uniquement) */}
                                                 {isMenuOpen && (
@@ -605,15 +545,12 @@ export default function DiscuterPage() {
                                                             ))}
                                                         </div>
 
-
                                                         {/* Message original sur lequel on clique (fixe à droite, largeur adaptative) */}
                                                         <div
                                                             className="inline-block max-w-[70%] p-2 rounded-full mt-2 bg-[rgba(23,23,23,1)] text-white text-sm ml-auto"
                                                         >
                                                             {msg.content}
                                                         </div>
-
-
 
                                                         {/* Actions (fixe et centré) */}
                                                         <div className="w-[160px] mx-auto flex flex-col ml-29 gap-1 p-2 rounded mt-2" style={{ background: "rgba(56,56,56,1)" }}>
@@ -637,10 +574,8 @@ export default function DiscuterPage() {
                                                             </div>
                                                         </div>
                                                     </div>
-
                                                 )}
                                             </div>
-
                                         </div>
                                     );
                                 })}
@@ -655,6 +590,7 @@ export default function DiscuterPage() {
                                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Image src="/icons/send.png" alt="Envoyer" width={24} height={24} />}
                                 </button>
                             </form>
+                            
                             {/* Undo toast */}
                             {undoStack.length > 0 && (
                                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#101010] border border-white/10 px-4 py-2 rounded-full flex items-center gap-3">
@@ -672,7 +608,6 @@ export default function DiscuterPage() {
                         )}
                     </div>
 
-
                     {/* Share modal - using TransferModal component */}
                     <TransferModal
                         open={shareModal.open}
@@ -681,16 +616,17 @@ export default function DiscuterPage() {
                         chatListItems={chatListItems}
                         onClose={() => setShareModal({ open: false, index: null })}
                         onSend={(recipient, msg) => {
-                            setMessages(prev => [...prev, { role: 'user', content: `Transféré à ${recipient.name}: ${msg.type === 'image' ? '[image]' : msg.content}`, type: 'text', time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }]);
+                            setMessages(prev => [...prev, { 
+                                role: 'user', 
+                                content: `Transféré à ${recipient.name}: ${msg.type === 'image' ? '[image]' : msg.content}`, 
+                                type: 'text', 
+                                time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) 
+                            }]);
                             setShareModal({ open: false, index: null });
                         }}
                     />
                 </div>
             </main>
-
-
-
         </div>
     );
-
 }
