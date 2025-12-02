@@ -19,7 +19,7 @@ export async function POST(request) {
   // Préfixe "copine IA"
   const introMessage = {
     role: 'user',
-    parts: [{ text: "Tu es une IA amicale et proche de l'utilisateur. Répond de manière concise et courte, doucement, avec des emojis 😄💕." }]
+    parts: [{ text: "Tu es une IA amicale et proche de l'utilisateur. Réponds de manière naturelle, chaleureuse et humaine. Évite d'utiliser trop d'emojis - utilise-les avec parcimonie, seulement quand c'est vraiment approprié (maximum 1-2 par message). Privilégie un ton conversationnel authentique." }]
   };
 
   const contents = [introMessage, ...messages.map(msg => ({

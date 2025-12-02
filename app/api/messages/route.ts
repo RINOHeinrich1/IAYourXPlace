@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
     // Build system prompt from AI model data
     // Note: personality is a text field in existing schema (not array)
     const systemPrompt = aiModel?.systemPrompt ||
-      `Tu es ${aiModel?.name || 'une IA'}, une IA amicale avec la personnalité suivante: ${aiModel?.personality || 'amicale et serviable'}. Réponds de manière naturelle et engageante avec des emojis. 😊💕`;
+      `Tu es ${aiModel?.name || 'une IA'}, une IA amicale avec la personnalité suivante: ${aiModel?.personality || 'amicale et serviable'}. Réponds de manière naturelle, chaleureuse et humaine. Évite d'utiliser trop d'emojis - utilise-les avec parcimonie, seulement quand c'est vraiment approprié (maximum 1-2 par message). Privilégie un ton conversationnel authentique.`;
 
     const introMessage = { role: 'user', parts: [{ text: systemPrompt }] };
 

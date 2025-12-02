@@ -1,16 +1,16 @@
-'use client'; 
+'use client'; // Ce composant utilise des fonctionnalités client (le lien de retour)
 
 import Image from 'next/image';
 import Link from 'next/link'; 
-import React, { useState } from 'react';
 
-
+// --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
-
-    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },  { name: 'Collection', active: true, iconPath: '/images/colec.png', href: '/collection' },
-    { name: 'Générer', active: true, iconPath: '/images/chat.png', href: '/generer' },
-    { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png', href: '/creer-modele' },
-    { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
+    { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' }, // L'icône Home est ici aussi
+    // CORRECTION : Discuter est INACTIF mais possède le LIEN vers la page /discuter
+    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },{ name: 'Collection', active: false, iconPath: '/images/colec.png' },
+    { name: 'Générer', active: false, iconPath: '/images/chat.png' },
+    { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png' },
+    { name: 'Mes IA', active: false, iconPath: '/images/mesia.png' },
 ];
 
 const liveModels = [
@@ -139,8 +139,6 @@ const Header = () => (
 
 // --- Composant Principal de la Page AI ---
 export default function AiDashboardPage() {
-
-
 return(
  <div className="min-h-screen bg-black text-white">
 <Sidebar />
@@ -173,10 +171,10 @@ return(
             className="absolute top-2 right-2 rounded-full z-10" 
         />
                   <h3 className="text-xl font-bold">{model.name}</h3>
-                 <Link href="/live-action">
-  <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
-</Link>
+                  <div className="flex -ml-17 space-x-1 -mt-3 text-sm text-white/80">
+                    <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
 
+                  </div>
                 </div>
               </div>
             ))}
