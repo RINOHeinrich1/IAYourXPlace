@@ -5,11 +5,12 @@ import Link from 'next/link';
 
 // --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
-    { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' }, 
-    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },{ name: 'Collection', active: false, iconPath: '/images/colec.png' },
-    { name: 'Générer', active: false, iconPath: '/images/chat.png' },
-    { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png' },
-    { name: 'Mes IA', active: false, iconPath: '/images/mesia.png' },
+    { name: 'Home', active: true, iconPath: '/images/home.png', href: '/ai-dashboard' },
+    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
+    { name: 'Collection', active: false, iconPath: '/images/colec.png', href: '/collection' },
+    { name: 'Générer', active: false, iconPath: '/images/chat.png', href: '/generer' },
+    { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png', href: '/creer-modele' },
+    { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
 ];
 
 const liveModels = [

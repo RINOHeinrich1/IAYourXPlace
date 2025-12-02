@@ -765,7 +765,7 @@ export default function DiscuterPage() {
                           </div>
                         </div>
                       </div>
-                      {isMe && <img src="/images/user.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
+                      {isMe && <img src="/images/iconuser.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
                     </div>
                   );
                 })}
@@ -874,7 +874,7 @@ export default function DiscuterPage() {
 
                         )}
                       </div>
-                      {isMe && <img src="/images/user.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
+                      {isMe && <img src="/images/iconuser.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
                     </div>
                   );
                 })}
