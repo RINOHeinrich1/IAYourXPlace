@@ -82,14 +82,14 @@ interface Profile {
 export default function MesIA() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
 
-  useEffect(() => {
-    const fetchProfiles = async () => {
-      const { data, error } = await supabase.from<Profile>('profiles').select('*').order('created_at', { ascending: false });
-      if (error) console.error('Erreur Supabase:', error);
-      else if (data) setProfiles(data);
-    };
-    fetchProfiles();
-  }, []);
+  // useEffect(() => {
+  //   const fetchProfiles = async () => {
+  //     const { data, error } = await supabase.from<Profile>('profiles').select('*').order('created_at', { ascending: false });
+  //     if (error) console.error('Erreur Supabase:', error);
+  //     else if (data) setProfiles(data);
+  //   };
+  //   fetchProfiles();
+  // }, []);
 
   const generateDescription = (profile: Profile) => {
     // Création automatique d'une phrase à partir des champs
