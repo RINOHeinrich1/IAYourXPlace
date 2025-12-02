@@ -1,12 +1,11 @@
-'use client'; // Ce composant utilise des fonctionnalités client (le lien de retour)
+'use client'; 
 
 import Image from 'next/image';
 import Link from 'next/link'; 
 
 // --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
-    { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' }, // L'icône Home est ici aussi
-    // CORRECTION : Discuter est INACTIF mais possède le LIEN vers la page /discuter
+    { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' }, 
     { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },{ name: 'Collection', active: false, iconPath: '/images/colec.png' },
     { name: 'Générer', active: false, iconPath: '/images/chat.png' },
     { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png' },
@@ -38,8 +37,8 @@ const aiCharacters = [
 
 const backItem = { 
     name: 'Revenir dans myXplace', 
-    iconPath: '/icons/back_arrow.png', // Icône de flèche arrière
-    href: '/', // Lien vers la page d'accueil
+    iconPath: '/icons/back_arrow.png',
+    href: '/', 
 };
 
 
@@ -52,7 +51,6 @@ const Sidebar = () => (
         
        <nav className="space-y-3">
             {aiNavItems.map((item) => {
-                // CORRECTION : Vérifie si l'item.name est 'Home' pour le mettre actif
                 const isActive = item.name === 'Home'; 
                 const classes = `flex items-center space-x-3 py-2 px-6 rounded-lg cursor-pointer
                     ${isActive 
@@ -79,7 +77,7 @@ const Sidebar = () => (
             {/* Élément "Revenir dans myXplace" */}
             <div className="pt-6">
                 <Link 
-                    href={backItem.href} // Retourne à la page d'accueil
+                    href={backItem.href} 
                     className={`w-full flex items-center space-x-3 py-2 px-6 transition-colors rounded-lg cursor-pointer  text-white hover:bg-red-600`}
                 >
                     <Image src={backItem.iconPath} alt="Back Icon" width={20} height={20} />
@@ -92,9 +90,7 @@ const Sidebar = () => (
 
 const Header = () => (
     <header className=" right-0 z-20 p-4 bg-black/80 backdrop-blur-sm h-[80px]">
-        {/* Conteneur principal utilisant flex et justify-between pour séparer les éléments */}
         <div className="flex flex-col justify-between items-start h-full">
-            {/* Ligne du haut : Laissez vide ou ajoutez des éléments pour aligner l'icône tout à droite */}
            <div className="w-full flex justify-end">
    <div 
         className="
@@ -118,7 +114,6 @@ const Header = () => (
 </div>
             {/* Ligne du bas : Titre aligné à gauche (par défaut) et centré verticalement par items-center */}
             <div className="flex items-center mt-8">
-                {/* Titre et état EN DIRECT */}
                 <h1 className="text-4xl font-bold text-red-600  ml-80">
                     Se lancer dans <span className=" text-white              /* Couleur du texte : Blanc */
         text-xl 
