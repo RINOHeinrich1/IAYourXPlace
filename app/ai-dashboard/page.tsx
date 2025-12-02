@@ -1,20 +1,22 @@
-'use client'; // Ce composant utilise des fonctionnalités client (le lien de retour)
+'use client';
 
 import Image from 'next/image';
-import Link from 'next/link'; 
+import Link from 'next/link';
+
+import React, { useState } from 'react';
+
 
 // --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
     { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' }, // L'icône Home est ici aussi
-    // CORRECTION : Discuter est INACTIF mais possède le LIEN vers la page /discuter
-    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },{ name: 'Collection', active: false, iconPath: '/images/colec.png' },
+    { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' }, { name: 'Collection', active: false, iconPath: '/images/colec.png' },
     { name: 'Générer', active: false, iconPath: '/images/chat.png' },
     { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png' },
     { name: 'Mes IA', active: false, iconPath: '/images/mesia.png' },
 ];
 
 const liveModels = [
-    { name: 'Regina', src: '/images/Group.png' }, 
+    { name: 'Regina', src: '/images/Group.png' },
     { name: 'Esther', src: '/images/Groupa.png' },
     { name: 'Colleen', src: '/images/Group.png' },
     { name: 'Dianne', src: '/images/Groupa.png' },
@@ -36,8 +38,8 @@ const aiCharacters = [
     { id: 12, src: "/images/L.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
 ];
 
-const backItem = { 
-    name: 'Revenir dans myXplace', 
+const backItem = {
+    name: 'Revenir dans myXplace',
     iconPath: '/icons/back_arrow.png', // Icône de flèche arrière
     href: '/', // Lien vers la page d'accueil
 };
@@ -45,40 +47,40 @@ const backItem = {
 
 // --- Composant Sidebar (Mode AI) ---
 const Sidebar = () => (
-    <div className="w-77 fixed left-0 top-0 h-full bg-black text-white p-4 z-30 border-r border-solid border-gray-400/50"> 
+    <div className="w-77 fixed left-0 top-0 h-full bg-black text-white p-4 z-30 border-r border-solid border-gray-400/50">
         <div className="mb-10 mt-2">
             <Image src="/logo2.png" alt="my X place Logo" width={188} height={44} />
         </div>
-        
-       <nav className="space-y-3">
+
+        <nav className="space-y-3">
             {aiNavItems.map((item) => {
                 // CORRECTION : Vérifie si l'item.name est 'Home' pour le mettre actif
-                const isActive = item.name === 'Home'; 
+                const isActive = item.name === 'Home';
                 const classes = `flex items-center space-x-3 py-2 px-6 rounded-lg cursor-pointer
-                    ${isActive 
-                        ? ' text-white font-semibold' 
+                    ${isActive
+                        ? ' text-white font-semibold'
                         : 'text-gray-400 hover:text-white '}`;
 
                 if (item.href) {
-                     return (
-                         <Link href={item.href} key={item.name} className={classes}>
-                             <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
-                             <span>{item.name}</span>
-                         </Link>
-                     );
+                    return (
+                        <Link href={item.href} key={item.name} className={classes}>
+                            <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
+                            <span>{item.name}</span>
+                        </Link>
+                    );
                 }
 
                 return (
                     <div key={item.name} className={classes}>
-                         <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
+                        <Image src={item.iconPath} alt={`${item.name} Icon`} width={20} height={20} />
                         <span>{item.name}</span>
                     </div>
                 );
             })}
-            
+
             {/* Élément "Revenir dans myXplace" */}
             <div className="pt-6">
-                <Link 
+                <Link
                     href={backItem.href} // Retourne à la page d'accueil
                     className={`w-full flex items-center space-x-3 py-2 px-6 transition-colors rounded-lg cursor-pointer  text-white hover:bg-red-600`}
                 >
@@ -95,9 +97,9 @@ const Header = () => (
         {/* Conteneur principal utilisant flex et justify-between pour séparer les éléments */}
         <div className="flex flex-col justify-between items-start h-full">
             {/* Ligne du haut : Laissez vide ou ajoutez des éléments pour aligner l'icône tout à droite */}
-           <div className="w-full flex justify-end">
-   <div 
-        className="
+            <div className="w-full flex justify-end">
+                <div
+                    className="
             flex items-center justify-center /* Centre l'icône à l'intérieur du div */
             w-[45px] h-[45px]             /* Définit la taille du cercle de la bordure (plus grand que l'icône) */
             rounded-full                  /* Rend le div parfaitement rond */
@@ -107,15 +109,15 @@ const Header = () => (
             bg-white/10
             mr-8                         /* Marge supérieure pour déplacer vers le bas */
         "
-    >    <Image 
-            src={'/images/iconuser.png'} 
-            alt="User Icon" 
-            width={20}           
-            height={20}
-           
-        />
-    </div>
-</div>
+                >    <Image
+                        src={'/images/iconuser.png'}
+                        alt="User Icon"
+                        width={20}
+                        height={20}
+
+                    />
+                </div>
+            </div>
             {/* Ligne du bas : Titre aligné à gauche (par défaut) et centré verticalement par items-center */}
             <div className="flex items-center mt-8">
                 {/* Titre et état EN DIRECT */}
@@ -139,68 +141,66 @@ const Header = () => (
 
 // --- Composant Principal de la Page AI ---
 export default function AiDashboardPage() {
-return(
- <div className="min-h-screen bg-black text-white">
-<Sidebar />
- <Header />
 
- {/* Main Content Area: ml-[240px] correspond à la largeur de la Sidebar */}
-      <main className={`ml-[240px] pt-7 p-8`}>
 
-        {/* Section Live Models */}
- <section className="mb-12">
-    <div 
-            // Masque la barre de défilement et permet le défilement horizontal
-            className="flex space-x-6 overflow-x-auto pb-4 custom-scrollbar-hide"
-          >
-            
-            {liveModels.map((model, index) => (
-              <div 
-                key={index} 
-                // Taille réduite pour afficher plus de cartes sans scrollbar (si l'écran est assez grand)
-                className="flex-shrink-0 w-56 h-72 rounded-xl overflow-hidden cursor-pointer relative"
-              >
-                <Image src={model.src} alt={model.name} layout="fill" objectFit="cover" className="object-cover"/>
-                <div className="absolute inset-0 p-4 flex flex-col justify-end text-white  to-transparent">
-                  <Image 
-            src={'/icons/liveai.png'} /* **À REMPLACER** */
-            alt="Icône Public"
-            width={26} 
-            height={26} 
-            // Positionne l'icône dans le coin supérieur droit
-            className="absolute top-2 right-2 rounded-full z-10" 
-        />
-                  <h3 className="text-xl font-bold">{model.name}</h3>
-                  <div className="flex -ml-17 space-x-1 -mt-3 text-sm text-white/80">
-                    <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
+    return (
+        <div className="min-h-screen bg-black text-white">
+            <Sidebar />
+            <Header />
 
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        {/* Section Personnages myModèle AI */}
-        <section>
-    <div className="flex items-center -mt-5">
-        {/* Titre et état EN DIRECT */}
-        <h1 className="text-4xl font-bold text-red-600 font-montserrat ml-17">
-            Personnages <span className="text-white">myModèle AI</span>
-        </h1>
-    </div>
-    
-   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 
+            {/* Main Content Area: ml-[240px] correspond à la largeur de la Sidebar */}
+            <main className={`ml-[240px] pt-7 p-8`}>
+
+                {/* Section Live Models */}
+                <section className="mb-12">
+                    <div
+                        // Masque la barre de défilement et permet le défilement horizontal
+                        className="flex space-x-6 overflow-x-auto pb-4 custom-scrollbar-hide"
+                    >
+
+                        {liveModels.map((model, index) => (
+                            <div
+                                key={index}
+                                className="flex-shrink-0 w-56 h-72 rounded-xl overflow-hidden cursor-pointer relative"
+                            >
+                                <Image src={model.src} alt={model.name} layout="fill" objectFit="cover" className="object-cover" />
+                                <div className="absolute inset-0 p-4 flex flex-col justify-end text-white  to-transparent">
+                                    <Image
+                                        src={'/icons/liveai.png'}
+                                        alt="Icône Public"
+                                        width={26}
+                                        height={26}
+                                        className="absolute top-2 right-2 rounded-full z-10"
+                                    />
+                                    <h3 className="text-xl font-bold">{model.name}</h3>
+                                    <Link href="/live-action">
+                                        <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
+                                    </Link>
+
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                <section>
+                    <div className="flex items-center -mt-5">
+
+                        <h1 className="text-4xl font-bold text-red-600 font-montserrat ml-17">
+                            Personnages <span className="text-white">myModèle AI</span>
+                        </h1>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 
      mx-[39px]  /* MARGE GAUCHE/DROITE (Horizontal) : Rétablie à 6 (large) */
     gap-y-9   /* MARGE HAUT/BAS (Vertical) : Diminuée à 3 (serré) */
     mt-8">
-         {aiCharacters.map((character) => (
-        <Link 
-            key={character.id} 
-            href={`/personnages/${character.slug}`} 
-            
-            // HAUTEUR AUGMENTÉE (LONG) : h-64
-            // LARGEUR IMPLICITE DE LA GRILLE (COURT) : La largeur est définie par le conteneur de grille
-            className="
+                        {aiCharacters.map((character) => (
+                            <Link
+                                key={character.id}
+                                href={`/personnages/${character.slug}`}
+
+                                className="
             ml-8
                 h-68 rounded-xl overflow-hidden cursor-pointer relative shadow-lg 
                 block 
@@ -208,52 +208,52 @@ return(
                 
                 hover:scale-[1.03] transform transition-transform duration-300
             "
-        >
-            {/* Image de fond du personnage */}
-            <Image 
-                src={character.src} 
-                alt={character.name} 
-                layout="fill" 
-                objectFit="cover" 
-                className="object-cover"
-            />
+                            >
+                                {/* Image de fond du personnage */}
+                                <Image
+                                    src={character.src}
+                                    alt={character.name}
+                                    layout="fill"
+                                    objectFit="cover"
+                                    className="object-cover"
+                                />
 
-            {/* Conteneur de superposition pour les infos en bas */}
-            <div className="absolute inset-0 p-4 flex flex-col justify-end text-white bg-black/30 hover:bg-black/50 transition-all duration-300">
-                {/* ... Contenu du texte et des icônes ... */}
-                <h3 className="text-lg font-bold">{character.name}</h3>
-                <p className="text-sm text-white/90 truncate">
-                    {character.phrase}
-                </p>
-                <div className="flex space-x-1 mt-1 text-sm text-white/80">
-               {character.hasConsoleIcon && (
-                                    <Image 
-                                        src="/icons/console.png" 
-                                        alt="Game icon" 
-                                        width={52} 
-                                        height={30} 
-                                    />
-                                )}
-                                
-                                {/* Icône 2 : NOUVELLE ICÔNE (Affichée si hasNewIcon est Vrai) */}
-                                {character.hasNewIcon && (
-                                    <Image 
-                                        src="/icons/micro.png" /* 🚨 REMPLACEZ PAR VOTRE CHEMIN */
-                                        alt="New Icon" 
-                                        width={52} 
-                                        height={30} 
-                                    />
-                                
-                
-                )}
-                </div>
-            </div>
-        </Link>
-    ))}
-</div>
-</section>
-        
-      </main>
-    </div>
-  );
+                                {/* Conteneur de superposition pour les infos en bas */}
+                                <div className="absolute inset-0 p-4 flex flex-col justify-end text-white bg-black/30 hover:bg-black/50 transition-all duration-300">
+                                    {/* ... Contenu du texte et des icônes ... */}
+                                    <h3 className="text-lg font-bold">{character.name}</h3>
+                                    <p className="text-sm text-white/90 truncate">
+                                        {character.phrase}
+                                    </p>
+                                    <div className="flex space-x-1 mt-1 text-sm text-white/80">
+                                        {character.hasConsoleIcon && (
+                                            <Image
+                                                src="/icons/console.png"
+                                                alt="Game icon"
+                                                width={52}
+                                                height={30}
+                                            />
+                                        )}
+
+                                        {/* Icône 2 : NOUVELLE ICÔNE (Affichée si hasNewIcon est Vrai) */}
+                                        {character.hasNewIcon && (
+                                            <Image
+                                                src="/icons/micro.png" /* 🚨 REMPLACEZ PAR VOTRE CHEMIN */
+                                                alt="New Icon"
+                                                width={52}
+                                                height={30}
+                                            />
+
+
+                                        )}
+                                    </div>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                </section>
+
+            </main>
+        </div>
+    );
 }

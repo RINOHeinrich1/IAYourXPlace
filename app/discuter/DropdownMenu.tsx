@@ -26,8 +26,6 @@ export default function DropdownMenu({
 
     return (
         <div className="relative" ref={menuRef}>
-            
-            {/* ⋮ BOUTON (inchangé) */}
             <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="text-white text-xl p-2 rounded-full hover:bg-gray-700 transition"
@@ -50,7 +48,6 @@ export default function DropdownMenu({
                 }}
             >
 
-                {/* 🔹 BTN 1 */}
                 <button
                     onClick={() => {
                         handleResetChat();
@@ -65,7 +62,6 @@ export default function DropdownMenu({
                 {/* LIGNE */}
                 <div className="w-[202px] mx-auto border-t border-white/30 my-2" />
 
-                {/* 🔹 BTN 2 */}
                 <button
                     onClick={() => {
                         handleDeleteChat();
