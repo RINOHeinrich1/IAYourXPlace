@@ -195,22 +195,18 @@ return(
      mx-[39px]  /* MARGE GAUCHE/DROITE (Horizontal) : Rétablie à 6 (large) */
     gap-y-9   /* MARGE HAUT/BAS (Vertical) : Diminuée à 3 (serré) */
     mt-8">
-         {aiCharacters.map((character) => (
-        <Link 
-            key={character.id} 
-            href={`/personnages/${character.slug}`} 
-            
-            // HAUTEUR AUGMENTÉE (LONG) : h-64
-            // LARGEUR IMPLICITE DE LA GRILLE (COURT) : La largeur est définie par le conteneur de grille
-            className="
-            ml-8
-                h-68 rounded-xl overflow-hidden cursor-pointer relative shadow-lg 
-                block 
-             w-[90%] mx-auto 
-                
-                hover:scale-[1.03] transform transition-transform duration-300
-            "
-        >
+        {aiCharacters.map((character) => (
+  <Link
+    key={character.id}
+    href="/profil"  // ← redirection vers une page statique
+    className="
+      ml-8
+      h-68 rounded-xl overflow-hidden cursor-pointer relative shadow-lg
+      block
+      w-[90%] mx-auto
+      hover:scale-[1.03] transform transition-transform duration-300
+    "
+  >
             {/* Image de fond du personnage */}
             <Image 
                 src={character.src} 
@@ -240,7 +236,7 @@ return(
                                 {/* Icône 2 : NOUVELLE ICÔNE (Affichée si hasNewIcon est Vrai) */}
                                 {character.hasNewIcon && (
                                     <Image 
-                                        src="/icons/micro.png" /* 🚨 REMPLACEZ PAR VOTRE CHEMIN */
+                                        src="/icons/micro.png" 
                                         alt="New Icon" 
                                         width={52} 
                                         height={30} 
