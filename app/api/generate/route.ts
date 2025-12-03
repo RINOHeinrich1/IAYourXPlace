@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// 🔹 Création du client Supabase
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!   // obligatoire pour INSERT sécurisé
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // nécessaire pour INSERT sécurisé
 );
 
 export async function POST(req: Request) {
@@ -12,16 +13,16 @@ export async function POST(req: Request) {
 
     const {
       userId,
-      vetementsIds,
-      actionsIds,
-      posesIds,
-      accessoiresIds,
-      scenesIds,
+      vetements,    // 🔹 labels, pas IDs
+      actions,
+      poses,
+      accessoires,
+      scenes,
       imageUrl,
       imageCount
     } = body;
 
-    // 🔥 Vérification minimale
+    // Vérification minimale
     if (!imageUrl) {
       return NextResponse.json(
         { error: "imageUrl est obligatoire" },
@@ -29,18 +30,16 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔥 Insertion Supabase
+    // 🔹 Insertion dans Supabase avec les noms corrects
     const { data, error } = await supabase
       .from("image_generations")
       .insert({
         user_id: userId || null,
-
-        vetements_ids: vetementsIds || [],
-        actions_ids: actionsIds || [],
-        poses_ids: posesIds || [],
-        accessoires_ids: accessoiresIds || [],
-        scenes_ids: scenesIds || [],
-
+        vetements_names: vetements || [],
+        actions_names: actions || [],
+        poses_names: poses || [],
+        accessoires_names: accessoires || [],
+        scenes_names: scenes || [],
         image_url: imageUrl,
         image_count: imageCount || 1
       })
