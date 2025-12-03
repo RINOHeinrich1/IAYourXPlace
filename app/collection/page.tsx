@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 
 const aiNavItems = [
-  { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' },
+  { name: 'Home', active: false, iconPath: '/images/home.png', href: '/ai-dashboard' },
   { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
   { name: 'Collection', active: true, iconPath: '/images/colec.png', href: '/collection' },
   { name: 'Générer', active: true, iconPath: '/images/chat.png', href: '/generer' }, // <-- activé

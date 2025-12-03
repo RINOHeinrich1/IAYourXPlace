@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 import { useModelStore } from '../../../store/useModelStore';
 
@@ -138,7 +138,8 @@ export default function SummaryPage() {
   const [activeTab, setActiveTab] = useState<'appearance' | 'personality'>('appearance');
 
   const router = useRouter();
-  const currentPath = router.pathname || '';
+  const pathname = usePathname();
+  const currentPath = pathname || '';
   const { modelData } = useModelStore();
 
   const profileImageUrl = '/images/cheuveux10.png';
@@ -364,7 +365,7 @@ export default function SummaryPage() {
    
     <ProfileCard
       label="Personnalité"
-      value={typeof profile.personality === 'string' ? profile.personality : (profile.personality?.join(', ') || 'N/A')}
+      value={profile.personality || 'N/A'}
       isHighlighted
       size="small"
       showIcon={false}

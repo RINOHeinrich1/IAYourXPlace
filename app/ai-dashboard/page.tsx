@@ -1,7 +1,8 @@
-'use client'; 
+'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import Link from 'next/link'; 
+import Link from 'next/link';
 
 // --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
@@ -14,25 +15,36 @@ const aiNavItems = [
 ];
 
 const liveModels = [
-    { name: 'Regina', src: '/images/Group.png' }, 
+    { name: 'Regina', src: '/images/Group.png' },
     { name: 'Esther', src: '/images/Groupa.png' },
     { name: 'Colleen', src: '/images/Group.png' },
     { name: 'Dianne', src: '/images/Groupa.png' },
 ];
 
-const aiCharacters = [
+// Interface for AI models fetched from the database
+interface AIModel {
+    id: string;
+    name: string;
+    description?: string;
+    personality?: string;
+    avatar_url?: string;
+    created_at: string;
+    created_by: string;
+}
 
+// Fallback static data for display when no dynamic data is available
+const fallbackAiCharacters = [
     { id: 1, src: "/images/A.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." },
     { id: 2, src: "/images/B.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." },
-    { id: 3, src: "/images/C.png", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: true, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." }, // 🌟 Image 3 : Console ET Nouveau
+    { id: 3, src: "/images/C.png", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: true, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." },
     { id: 4, src: "/images/D.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 5, src: "/images/E.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: true, slug: "lara-croft-ai", phrase: "La Force est avec lui" }, // 🌟 Image 5 : Nouveau SEULEMENT
+    { id: 5, src: "/images/E.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: true, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
     { id: 6, src: "/images/F.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 7, src: "/images/G.jpg", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" }, // 🌟 Image 7 : Console SEULEMENT
+    { id: 7, src: "/images/G.jpg", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
     { id: 8, src: "/images/H.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
     { id: 9, src: "/images/I.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
     { id: 10, src: "/images/J.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 11, src: "/images/K.jpg", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" }, // 🌟 Image 11 : Console SEULEMENT
+    { id: 11, src: "/images/K.jpg", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
     { id: 12, src: "/images/L.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
 ];
 
@@ -135,6 +147,40 @@ const Header = () => (
 
 // --- Composant Principal de la Page AI ---
 export default function AiDashboardPage() {
+    const [aiCharacters, setAiCharacters] = useState<AIModel[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchAdminAI = async () => {
+            try {
+                // Fetch AI models created by admin users
+                const response = await fetch('/api/ai-profiles?adminOnly=true');
+                if (response.ok) {
+                    const data = await response.json();
+                    setAiCharacters(data.models || []);
+                }
+            } catch (error) {
+                console.error('Error fetching AI models:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAdminAI();
+    }, []);
+
+    // Convert AIModel to display format
+    const displayCharacters = aiCharacters.length > 0
+        ? aiCharacters.map((model, index) => ({
+            id: model.id,
+            src: model.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
+            name: model.name,
+            hasConsoleIcon: index % 3 === 0,
+            hasNewIcon: index % 4 === 0,
+            slug: model.name.toLowerCase().replace(/\s+/g, '-'),
+            phrase: model.description || model.personality || 'Une IA créée par les administrateurs'
+        }))
+        : fallbackAiCharacters;
+
 return(
  <div className="min-h-screen bg-black text-white">
 <Sidebar />
@@ -202,15 +248,20 @@ return(
             Personnages <span className="text-white">myModèle AI</span>
         </h1>
     </div>
-    
-   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 
+
+    {loading ? (
+        <div className="flex items-center justify-center py-16">
+            <p className="text-xl text-gray-400">Chargement des modèles IA...</p>
+        </div>
+    ) : (
+   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4
      mx-[39px]  /* MARGE GAUCHE/DROITE (Horizontal) : Rétablie à 6 (large) */
     gap-y-9   /* MARGE HAUT/BAS (Vertical) : Diminuée à 3 (serré) */
     mt-8">
-        {aiCharacters.map((character) => (
+        {displayCharacters.map((character) => (
   <Link
     key={character.id}
-    href="/profil"  // ← redirection vers une page statique
+    href="/profil"
     className="
       ml-8
       h-68 rounded-xl overflow-hidden cursor-pointer relative shadow-lg
@@ -220,11 +271,11 @@ return(
     "
   >
             {/* Image de fond du personnage */}
-            <Image 
-                src={character.src} 
-                alt={character.name} 
-                layout="fill" 
-                objectFit="cover" 
+            <Image
+                src={character.src}
+                alt={character.name}
+                layout="fill"
+                objectFit="cover"
                 className="object-cover"
             />
 
@@ -237,30 +288,31 @@ return(
                 </p>
                 <div className="flex space-x-1 mt-1 text-sm text-white/80">
                {character.hasConsoleIcon && (
-                                    <Image 
-                                        src="/icons/console.png" 
-                                        alt="Game icon" 
-                                        width={52} 
-                                        height={30} 
+                                    <Image
+                                        src="/icons/console.png"
+                                        alt="Game icon"
+                                        width={52}
+                                        height={30}
                                     />
                                 )}
-                                
+
                                 {/* Icône 2 : NOUVELLE ICÔNE (Affichée si hasNewIcon est Vrai) */}
                                 {character.hasNewIcon && (
-                                    <Image 
-                                        src="/icons/micro.png" 
-                                        alt="New Icon" 
-                                        width={52} 
-                                        height={30} 
+                                    <Image
+                                        src="/icons/micro.png"
+                                        alt="New Icon"
+                                        width={52}
+                                        height={30}
                                     />
-                                
-                
+
+
                 )}
                 </div>
             </div>
         </Link>
     ))}
 </div>
+    )}
 </section>
         
       </main>

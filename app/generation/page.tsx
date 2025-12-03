@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -69,7 +69,7 @@ interface BottomImage {
   label: string;
 }
 
-export default function GenerationPage() {
+function GenerationPageContent() {
   const searchParams = useSearchParams();
   const imgSrc = searchParams.get('img') || '/images/generer1.jpg';
   const imgName = searchParams.get('name') || 'Mila nowak';
@@ -303,5 +303,13 @@ const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id ==
         </div>
       </div>
     </div>
+  );
+}
+
+export default function GenerationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center">Chargement...</div>}>
+      <GenerationPageContent />
+    </Suspense>
   );
 }

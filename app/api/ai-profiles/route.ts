@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
-// GET /api/ai-profiles - Get all AI models (or user's own)
+// GET /api/ai-profiles - Get all AI models (or user's own, or admin-only)
 // Uses existing ai_models table
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
     const { searchParams } = new URL(request.url);
     const ownOnly = searchParams.get('own') === 'true';
+    const adminOnly = searchParams.get('adminOnly') === 'true';
 
     let query = supabase
       .from('ai_models')
@@ -18,6 +19,26 @@ export async function GET(request: NextRequest) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         query = query.eq('created_by', user.id);
+      }
+    } else if (adminOnly) {
+      // Fetch AI models created by admin users only
+      const { data: adminProfiles } = await supabase
+        .from('profiles')
+        .select('owner_id')
+        .eq('role', 'admin');
+
+      const adminUserIds = (adminProfiles || [])
+        .map((p: { owner_id: string | null }) => p.owner_id)
+        .filter((id): id is string => id !== null);
+
+      if (adminUserIds.length > 0) {
+        query = query.in('created_by', adminUserIds);
+      } else {
+        // No admin users found, return empty array
+        return NextResponse.json({
+          profiles: [],
+          models: []
+        });
       }
     }
 

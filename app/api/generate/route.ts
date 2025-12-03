@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔹 Création du client Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // nécessaire pour INSERT sécurisé
-);
+// 🔹 Création du client Supabase (lazy initialization to avoid build-time errors)
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY! // nécessaire pour INSERT sécurisé
+  );
+}
 
 export async function POST(req: Request) {
+  const supabase = getSupabaseClient();
   try {
     const body = await req.json();
 
