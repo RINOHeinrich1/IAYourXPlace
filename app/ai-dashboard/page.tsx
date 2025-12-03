@@ -32,21 +32,7 @@ interface AIModel {
     created_by: string;
 }
 
-// Fallback static data for display when no dynamic data is available
-const fallbackAiCharacters = [
-    { id: 1, src: "/images/A.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." },
-    { id: 2, src: "/images/B.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." },
-    { id: 3, src: "/images/C.png", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: true, slug: "lara-croft-ai", phrase: "Donec sed erat ut magna suscipit mattis..." },
-    { id: 4, src: "/images/D.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 5, src: "/images/E.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: true, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 6, src: "/images/F.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 7, src: "/images/G.jpg", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 8, src: "/images/H.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 9, src: "/images/I.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 10, src: "/images/J.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 11, src: "/images/K.jpg", name: "Lara Croft AI", hasConsoleIcon: true, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-    { id: 12, src: "/images/L.jpg", name: "Lara Croft AI", hasConsoleIcon: false, hasNewIcon: false, slug: "lara-croft-ai", phrase: "La Force est avec lui" },
-];
+// No fallback static data - only display actual AI models from the database
 
 const backItem = { 
     name: 'Revenir dans myXplace', 
@@ -168,18 +154,27 @@ export default function AiDashboardPage() {
         fetchAdminAI();
     }, []);
 
-    // Convert AIModel to display format
-    const displayCharacters = aiCharacters.length > 0
-        ? aiCharacters.map((model, index) => ({
-            id: model.id,
-            src: model.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
-            name: model.name,
-            hasConsoleIcon: index % 3 === 0,
-            hasNewIcon: index % 4 === 0,
-            slug: model.name.toLowerCase().replace(/\s+/g, '-'),
-            phrase: model.description || model.personality || 'Une IA créée par les administrateurs'
-        }))
-        : fallbackAiCharacters;
+    // Define the display character interface
+    interface DisplayCharacter {
+        id: string;
+        src: string;
+        name: string;
+        hasConsoleIcon: boolean;
+        hasNewIcon: boolean;
+        slug: string;
+        phrase: string;
+    }
+
+    // Convert AIModel to display format - NO FALLBACK DATA, only real database models
+    const displayCharacters: DisplayCharacter[] = aiCharacters.map((model, index) => ({
+        id: model.id,
+        src: model.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
+        name: model.name,
+        hasConsoleIcon: index % 3 === 0,
+        hasNewIcon: index % 4 === 0,
+        slug: model.name.toLowerCase().replace(/\s+/g, '-'),
+        phrase: model.description || model.personality || 'Une IA créée par les administrateurs'
+    }));
 
 return(
  <div className="min-h-screen bg-black text-white">
@@ -252,6 +247,11 @@ return(
     {loading ? (
         <div className="flex items-center justify-center py-16">
             <p className="text-xl text-gray-400">Chargement des modèles IA...</p>
+        </div>
+    ) : displayCharacters.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 mx-[39px]">
+            <p className="text-xl text-gray-400 mb-4">Aucun modèle IA créé par les administrateurs.</p>
+            <p className="text-sm text-gray-500">Les modèles IA créés par les administrateurs apparaîtront ici.</p>
         </div>
     ) : (
    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4
