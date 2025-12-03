@@ -3,10 +3,14 @@
 import { Sidebar, LargeImagePlaceholder } from './sidebar';
 import TransferModal from './TransferModal';
 import DropdownMenu from './DropdownMenu';
+import UserMenuDropdown from '../components/UserMenuDropdown';
+import MagicPopup from "./MagicPopup";
+
 import Image from 'next/image';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
+import { createPortal } from "react-dom";
 
 // Types for API data
 interface AIModel {
@@ -55,6 +59,8 @@ interface Message {
 }
 
 export default function DiscuterPage() {
+
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   // Sidebar
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const toggleSidebar = () => setIsSidebarCollapsed(prev => !prev);
@@ -70,7 +76,8 @@ export default function DiscuterPage() {
   const activeChat = chatListItems.find(chat => chat.id === selectedChatId);
   // Get the full AI model info for the selected chat
   const activeAiModel = aiModels.find(m => m.id === activeChat?.modelId);
-
+  //   magicpopup
+  const [showMagicPopup, setShowMagicPopup] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -416,10 +423,10 @@ export default function DiscuterPage() {
           const updated = prev.map(item =>
             item.modelId === activeChat.modelId
               ? {
-                  ...item,
-                  lastMessage: data.assistant_message.content?.substring(0, 30) + '...',
-                  lastAiResponseAt: data.assistant_message.created_at
-                }
+                ...item,
+                lastMessage: data.assistant_message.content?.substring(0, 30) + '...',
+                lastAiResponseAt: data.assistant_message.created_at
+              }
               : item
           );
           // Re-sort: most recent AI response first
@@ -597,12 +604,12 @@ export default function DiscuterPage() {
     const repliedToName = isMe ? "vous-même" : (activeChat?.name || 'IA');
 
     return (
-     <div
-  className="w-[600px] h-[99px] mt-20 flex justify-between items-center z-10 mx-auto p-3 border border-white/20 rounded-t-2xl"
-  style={{
-    background: 'linear-gradient(0deg, rgba(16,16,16,0.9) 0%, rgba(30,30,30,0.9) 100%)'
-  }}
->
+      <div
+        className="w-[600px] h-[99px] mt-20 flex justify-between items-center z-10 mx-auto p-3 border border-white/20 rounded-t-2xl"
+        style={{
+          background: 'linear-gradient(0deg, rgba(16,16,16,0.9) 0%, rgba(30,30,30,0.9) 100%)'
+        }}
+      >
 
         {/* Zone texte de réponse */}
         <div className="flex flex-col overflow-hidden w-full h-full justify-center">
@@ -664,11 +671,28 @@ export default function DiscuterPage() {
       {/* Ici le DropdownMenu */}
 
 
+
       {/* Contenu principal */}
       <main
         className={`flex-1 flex flex-col p-6 transition-all duration-300 ${isSidebarCollapsed ? 'pr-0' : ''}`}
         style={{ marginLeft: `${sidebarWidth}px` }}
       >
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            className="w-10 h-10 border-1 border-white rounded-full flex items-center justify-center cursor-pointer"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            <Image src="/images/iconuser.png" alt="User" width={24} height={24} />
+          </button>
+
+          {isMenuOpen && (
+            <div className="absolute right-0 -mt-9 w-40 rounded-lg shadow-lg p-2">
+              <UserMenuDropdown isOpen={isMenuOpen} />
+            </div>
+          )}
+        </div>
+        <div className="mb-16"></div>
+
         <h1 className="text-4xl font-bold mb-6">Discuter</h1>
         <div className="flex gap-3 w-full overflow-x-hidden">
           {/* Première card: chat list */}
@@ -720,7 +744,16 @@ export default function DiscuterPage() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
-                  <img src="/images/magic.png" className="h-7 rounded-full" alt="magic" />
+                  <div className="relative">
+                    <img
+                      src="/images/magic.png"
+                      className="h-7 rounded-full cursor-pointer"
+                      alt="magic"
+                      onClick={() => setShowMagicPopup(!showMagicPopup)}
+                    />
+
+                    <MagicPopup isOpen={showMagicPopup} />
+                  </div>
                   <div className="relative" ref={menuRef}>
                     <div className="flex justify-end">
                       <DropdownMenu
@@ -765,7 +798,7 @@ export default function DiscuterPage() {
                           </div>
                         </div>
                       </div>
-                      {isMe && <img src="/images/iconuser.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
+                      {isMe && <img src="" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
                     </div>
                   );
                 })}
@@ -815,16 +848,17 @@ export default function DiscuterPage() {
                         {isMenuOpen && (
                           <div
                             ref={menuRef}
-                            className="absolute z-50 rounded-xl shadow-xl p-3 flex flex-col items-center"
+                            className="fixed  z-[9999] rounded-xl shadow-xl p-3 flex flex-col items-center"
                             style={{
-                              top: "-110px",
-                              left: isMe ? "auto" : "-10px",
-                              right: isMe ? "-10px" : "auto",
+                              top: "215px",
+                              left: isMe ? "auto" : "770px",
+                              right: isMe ? "70px" : "auto",
                               background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%)",
                               backdropFilter: "blur(10px)",
                               border: "1px solid rgba(255,255,255,0.1)",
                             }}
                           >
+
                             {/* Réactions (toujours alignées horizontalement sous le message) */}
                             <div className="flex gap-2 mt-1 flex-nowrap overflow-x-auto">
                               {reactions.map(r => (
@@ -839,12 +873,11 @@ export default function DiscuterPage() {
                               ))}
                             </div>
 
-
                             {/* Message original sur lequel on clique (fixe à droite, largeur adaptative) */}
                             <div
                               className="inline-block max-w-[70%] p-2 rounded-full mt-2 bg-[rgba(23,23,23,1)] text-white text-sm ml-auto"
                             >
-                              {msg.content}
+                              {msg.content.split(" ").slice(0, 3).join(" ")}{msg.content.split(" ").length > 3 ? "..." : ""}
                             </div>
 
 
@@ -874,7 +907,7 @@ export default function DiscuterPage() {
 
                         )}
                       </div>
-                      {isMe && <img src="/images/iconuser.png" className="w-12 h-12 rounded-full object-cover ml-2" alt="me" />}
+
                     </div>
                   );
                 })}
@@ -965,10 +998,10 @@ export default function DiscuterPage() {
                     const updated = prev.map(item =>
                       item.modelId === recipient.modelId
                         ? {
-                            ...item,
-                            lastMessage: data.assistant_message.content?.substring(0, 30) + '...',
-                            lastAiResponseAt: data.assistant_message.created_at
-                          }
+                          ...item,
+                          lastMessage: data.assistant_message.content?.substring(0, 30) + '...',
+                          lastAiResponseAt: data.assistant_message.created_at
+                        }
                         : item
                     );
                     // Re-sort: most recent AI response first
