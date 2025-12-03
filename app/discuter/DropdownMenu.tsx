@@ -30,7 +30,7 @@ export default function DropdownMenu({
             {/* ⋮ BOUTON (inchangé) */}
             <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="text-white text-xl p-2 rounded-full hover:bg-gray-700 transition"
+                className="text-white text-xl p-2 rounded-full cursor-pointer  transition"
             >
                 ⋮
             </button>

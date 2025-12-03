@@ -54,7 +54,7 @@ export default function LiveActionPage() {
 
  <button
           onClick={handleClose}
-          className="absolute top-5 right-5 hover:bg-black/60 p-2 rounded-full transition"
+          className="absolute top-5 right-5 cursor-pointer p-2 rounded-full transition"
         >
           <Image src="/icons/close.png" alt="close" width={75} height={75} />
         </button>
