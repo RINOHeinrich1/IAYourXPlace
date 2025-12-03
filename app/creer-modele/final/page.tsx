@@ -31,7 +31,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPagePath }) => {
   const aiNavItems = [
-    { name: 'Home', iconPath: '/images/home.png', href: '/' },
+    { name: 'Home', iconPath: '/images/home.png', href: '/ai-dashboard' },
     { name: 'Discuter', iconPath: '/images/iconmes.png', href: '/discuter' },
     { name: 'Collection', iconPath: '/images/colec.png', href: '/collection' },
     { name: 'Générer', iconPath: '/images/chat.png', href: '/generer' },
