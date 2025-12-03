@@ -185,56 +185,49 @@ return(
       <main className={`ml-[240px] pt-7 p-8`}>
 
         {/* Section Live Models */}
- <section className="mb-12">
-    <div 
-            // Masque la barre de défilement et permet le défilement horizontal
-            className="flex space-x-6 overflow-x-auto pb-4 custom-scrollbar-hide"
-          >
-            
-          {liveModels.map((model, index) => (
+ <section className="mb-12 ml-17">
+  <div className="flex space-x-6 overflow-x-auto pb-4 custom-scrollbar-hide">
+    {liveModels.map((model, index) => (
       <div
         key={index}
-        className="flex-shrink-0 w-56 h-72 rounded-xl overflow-hidden cursor-pointer relative"
+        className="flex-shrink-0 w-56 h-72 rounded-xl overflow-hidden relative"
       >
-        {/* 🚀 Le lien unique englobe TOUT le contenu de la carte 🚀 */}
-        <Link href="/profil" passHref className="w-full h-full block"> 
-          
-          <div className="relative w-full h-full">
-            <Image
-              src={model.src}
-              alt={model.name}
-              layout="fill"
-              objectFit="cover"
-              className="object-cover"
-            />
-          </div>
+        {/* Image principale redirige vers Profil */}
+        <Link href="/profil" className="relative block w-full h-full z-0">
+          <Image
+            src={model.src}
+            alt={model.name}
+            fill
+            style={{ objectFit: 'cover' }}
+            className="object-cover"
+          />
+        </Link>
 
-          {/* Ce bloc de superposition est maintenant À L'INTÉRIEUR du Link */}
-          <div className="absolute inset-0 p-4 flex flex-col justify-end text-white bg-black/30 transition-all duration-300">
-            
-            {/* Icône LIVE AI (en haut à droite) */}
-            <Image
-              src={'/icons/liveai.png'}
-              alt="Icône Public"
-              width={26}
-              height={26}
-              className="absolute top-2 right-2 rounded-full z-10"
-            />
-                  <h3 className="text-xl font-bold">{model.name}</h3>
-            
-            {/* L'icône de la console (qui était un lien séparé) est maintenant DANS le lien /profil. */}
+        <div className="absolute inset-0 p-4 flex flex-col justify-end text-white to-transparent z-10 pointer-events-none">
+          <Image 
+            src={'/icons/liveai.png'}
+            alt="Icône Public"
+            width={26}
+            height={26}
+            className="absolute top-2 right-2 rounded-full pointer-events-auto"
+          />
+
+          <h3 className="text-xl font-bold ml-2 mb-2 pointer-events-none">{model.name}</h3>
+
+          {/* Console redirige vers Live */}
+          <Link href="/live-action" className="mt-2 ml-2 pointer-events-auto">
             <Image 
               src="/icons/console.png" 
               alt="Game icon" 
               width={52} 
               height={30} 
             />
-          </div>
-        </Link>
+          </Link>
+        </div>
       </div>
     ))}
-          </div>
-        </section>
+  </div>
+</section>
         {/* Section Personnages myModèle AI */}
         <section>
     <div className="flex items-center -mt-5">
