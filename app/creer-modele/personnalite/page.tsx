@@ -12,7 +12,7 @@ const INPUT_GRADIENT_STYLE = {
   background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 100%)',
 };
 const aiNavItems = [
-  { name: 'Home', active: false, iconPath: '/images/home.png', href: '/' },
+  { name: 'Home', active: false, iconPath: '/images/home.png', href: '/ai-dashboard' },
   { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
   { name: 'Collection', active: false, iconPath: '/images/colec.png', href: '/collection' },
   { name: 'Générer', active: false, iconPath: '/images/chat.png', href: '/generer' },
