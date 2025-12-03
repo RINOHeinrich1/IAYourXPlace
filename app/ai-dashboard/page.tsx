@@ -167,10 +167,9 @@ return(
             className="absolute top-2 right-2 rounded-full z-10" 
         />
                   <h3 className="text-xl font-bold">{model.name}</h3>
-                  <div className="flex -ml-17 space-x-1 -mt-3 text-sm text-white/80">
-                    <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
-
-                  </div>
+                   <Link href="/live-action">
+  <Image src="/icons/console.png" alt="Game icon" width={52} height={30} />
+</Link>
                 </div>
               </div>
             ))}
