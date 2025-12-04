@@ -165,16 +165,40 @@ export default function AiDashboardPage() {
         phrase: string;
     }
 
+    // Helper function to generate deterministic random icon flags based on model id
+    // Uses a simple hash to ensure consistent icon display for each character
+    const getIconFlags = (id: string): { hasConsoleIcon: boolean; hasNewIcon: boolean } => {
+        // Create a simple hash from the id string
+        let hash = 0;
+        for (let i = 0; i < id.length; i++) {
+            hash = ((hash << 5) - hash) + id.charCodeAt(i);
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        // Use hash to determine icon flags (4 possible combinations)
+        const iconPattern = Math.abs(hash) % 4;
+        switch (iconPattern) {
+            case 0: return { hasConsoleIcon: true, hasNewIcon: true };   // Both icons
+            case 1: return { hasConsoleIcon: true, hasNewIcon: false };  // Camera only
+            case 2: return { hasConsoleIcon: false, hasNewIcon: true };  // Microphone only
+            case 3: return { hasConsoleIcon: false, hasNewIcon: false }; // No icons
+            default: return { hasConsoleIcon: true, hasNewIcon: true };
+        }
+    };
+
     // Convert AIModel to display format - NO FALLBACK DATA, only real database models
-    const displayCharacters: DisplayCharacter[] = aiCharacters.map((model, index) => ({
-        id: model.id,
-        src: model.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
-        name: model.name,
-        hasConsoleIcon: index % 3 === 0,
-        hasNewIcon: index % 4 === 0,
-        slug: model.name.toLowerCase().replace(/\s+/g, '-'),
-        phrase: model.description || model.personality || 'Une IA créée par les administrateurs'
-    }));
+    // Icons vary randomly across characters based on their unique ID
+    const displayCharacters: DisplayCharacter[] = aiCharacters.map((model, index) => {
+        const iconFlags = getIconFlags(model.id);
+        return {
+            id: model.id,
+            src: model.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
+            name: model.name,
+            hasConsoleIcon: iconFlags.hasConsoleIcon,
+            hasNewIcon: iconFlags.hasNewIcon,
+            slug: model.name.toLowerCase().replace(/\s+/g, '-'),
+            phrase: model.description || model.personality || 'Une IA créée par les administrateurs'
+        };
+    });
 
 return(
  <div className="min-h-screen bg-black text-white">
@@ -261,7 +285,7 @@ return(
         {displayCharacters.map((character) => (
   <Link
     key={character.id}
-    href="/profil"
+    href={`/profil/${encodeURIComponent(character.slug)}?id=${character.id}`}
     className="
       ml-8
       h-68 rounded-xl overflow-hidden cursor-pointer relative shadow-lg
