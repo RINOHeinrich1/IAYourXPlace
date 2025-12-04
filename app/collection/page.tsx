@@ -2,14 +2,13 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-
+import { useState, useEffect } from 'react';
 
 const aiNavItems = [
   { name: 'Home', active: false, iconPath: '/images/home.png', href: '/ai-dashboard' },
   { name: 'Discuter', active: false, iconPath: '/images/iconmes.png', href: '/discuter' },
   { name: 'Collection', active: true, iconPath: '/images/colec.png', href: '/collection' },
-  { name: 'Générer', active: true, iconPath: '/images/chat.png', href: '/generer' }, // <-- activé
-
+  { name: 'Générer', active: false, iconPath: '/images/chat.png', href: '/generer' },
   { name: 'Créer un modèle IA', active: false, iconPath: '/images/crer.png', href: '/creer-modele' },
   { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
 ];
@@ -19,6 +18,28 @@ const backItem = {
   iconPath: '/icons/back_arrow.png',
   href: '/',
 };
+
+interface SubscribedCharacter {
+  id: string;
+  ai_model_id: string;
+  ai_models: {
+    id: string;
+    name: string;
+    description?: string;
+    avatar_url?: string;
+    personality?: string;
+  };
+}
+
+interface CollectionItem {
+  id: string;
+  name: string;
+  thumb: string;
+  large: string;
+  photos: number;
+  videos: number;
+  modelId: string;
+}
 
 const Sidebar = () => (
   <div className="w-77 fixed left-0 top-0 h-full bg-black text-white p-4 z-30 border-r border-solid border-gray-400/50">
@@ -59,24 +80,50 @@ const Sidebar = () => (
 );
 
 export default function CollectionPage() {
-  const collectionItems = [
-    {
-      id: 1,
-      name: 'Luna Moreno',
-      thumb: '/images/colection1.png',
-      large: '/images/colection3.png',
-      photos: 1,
-      videos: 1,
-    },
-    {
-      id: 2,
-      name: 'Mila Mah',
-      thumb: '/images/colection2.jpg',
-      large: '/images/colection2.jpg',
-      photos: 1,
-      videos: 1,
-    },
+  const [collectionItems, setCollectionItems] = useState<CollectionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Static fallback items for when no subscriptions exist
+  const fallbackItems: CollectionItem[] = [
+    { id: '1', name: 'Luna Moreno', thumb: '/images/colection1.png', large: '/images/colection3.png', photos: 1, videos: 1, modelId: '' },
+    { id: '2', name: 'Mila Mah', thumb: '/images/colection2.jpg', large: '/images/colection2.jpg', photos: 1, videos: 1, modelId: '' },
   ];
+
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      try {
+        const response = await fetch('/api/subscriptions/ai-character');
+        if (response.ok) {
+          const data = await response.json();
+          const subscriptions: SubscribedCharacter[] = data.subscriptions || [];
+
+          if (subscriptions.length > 0) {
+            const items: CollectionItem[] = subscriptions.map((sub, index) => ({
+              id: sub.id,
+              name: sub.ai_models?.name || 'IA inconnue',
+              thumb: sub.ai_models?.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
+              large: sub.ai_models?.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
+              photos: Math.floor(Math.random() * 50) + 1,
+              videos: Math.floor(Math.random() * 10) + 1,
+              modelId: sub.ai_model_id,
+            }));
+            setCollectionItems(items);
+          } else {
+            setCollectionItems(fallbackItems);
+          }
+        } else {
+          setCollectionItems(fallbackItems);
+        }
+      } catch (error) {
+        console.error('Error fetching subscriptions:', error);
+        setCollectionItems(fallbackItems);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubscriptions();
+  }, []);
 
   return (
     <div className="flex">
@@ -111,7 +158,20 @@ export default function CollectionPage() {
         {/* Titre */}
         <h1 className="text-3xl mt-22 font-bold mb-6">Ma collection</h1>
 
-        {/* Miniatures et infos */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <p className="text-xl text-gray-400">Chargement de votre collection...</p>
+          </div>
+        ) : collectionItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <p className="text-xl text-gray-400 mb-4">Votre collection est vide</p>
+            <p className="text-sm text-gray-500 mb-6">Abonnez-vous à des personnages IA pour les voir ici</p>
+            <Link href="/ai-dashboard" className="px-6 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+              Découvrir les personnages IA
+            </Link>
+          </div>
+        ) : (
+        /* Miniatures et infos */
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
           {collectionItems.map((item) => (
             <div key={item.id} className="space-y-4">
@@ -164,8 +224,11 @@ export default function CollectionPage() {
                   style={{ background: 'rgba(67, 66, 66, 1)' }}
                 />
 
-                {/* Image devant */}
-                <Link href={`/video`} className="block relative w-full h-full">
+                {/* Image devant - Link to profile or video */}
+                <Link
+                  href={item.modelId ? `/profil/${encodeURIComponent(item.name.toLowerCase().replace(/\s+/g, '-'))}?id=${item.modelId}` : `/video`}
+                  className="block relative w-full h-full"
+                >
                   <Image
                     src={item.large}
                     alt={`${item.name} Grande image`}
@@ -179,6 +242,7 @@ export default function CollectionPage() {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

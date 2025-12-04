@@ -7,10 +7,11 @@ import UserMenuDropdown from '../components/UserMenuDropdown';
 import MagicPopup from "./MagicPopup";
 
 import Image from 'next/image';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { Reply, Share2, Pin, Trash2, Undo2 } from 'lucide-react';
 import { createPortal } from "react-dom";
+import { useSearchParams } from 'next/navigation';
 
 // Types for API data
 interface AIModel {
@@ -58,7 +59,12 @@ interface Message {
   removed?: boolean;
 }
 
-export default function DiscuterPage() {
+function DiscuterPageContent() {
+  // URL parameters for auto-selecting a specific AI model
+  const searchParams = useSearchParams();
+  const urlModelId = searchParams.get('modelId');
+  const urlModelName = searchParams.get('modelName');
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   // Sidebar
@@ -244,8 +250,16 @@ export default function DiscuterPage() {
 
         setChatListItems(chatItems);
 
-        // Select first chat if available
-        if (chatItems.length > 0) {
+        // Auto-select based on URL parameter if provided, otherwise select first chat
+        if (urlModelId && !hasAutoSelected) {
+          const targetChat = chatItems.find(c => c.modelId === urlModelId);
+          if (targetChat) {
+            setSelectedChatId(targetChat.id);
+            setHasAutoSelected(true);
+          } else if (chatItems.length > 0) {
+            setSelectedChatId(chatItems[0].id);
+          }
+        } else if (chatItems.length > 0 && !selectedChatId) {
           setSelectedChatId(chatItems[0].id);
         }
       } catch (error) {
@@ -256,7 +270,7 @@ export default function DiscuterPage() {
     };
 
     fetchData();
-  }, []);
+  }, [urlModelId, hasAutoSelected]);
 
   // Load messages when selected chat changes
   useEffect(() => {
@@ -1043,4 +1057,13 @@ export default function DiscuterPage() {
     </div>
   );
 
+}
+
+// Export with Suspense wrapper for useSearchParams
+export default function DiscuterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center"><p>Chargement...</p></div>}>
+      <DiscuterPageContent />
+    </Suspense>
+  );
 }
