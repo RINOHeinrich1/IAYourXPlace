@@ -32,7 +32,6 @@ interface AIModel {
     created_by: string;
 }
 
-// No fallback static data - only display actual AI models from the database
 
 const backItem = { 
     name: 'Revenir dans myXplace', 
