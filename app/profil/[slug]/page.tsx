@@ -155,10 +155,18 @@ function CharacterProfileContent({ slug }: { slug: string }) {
                         {character.description || character.personality || 'Une IA créée par les administrateurs.'}
                     </p>
                     <div className="flex gap-4 mb-8">
-                        <button onClick={handleSubscribe} className="px-6 py-2 cursor-pointer rounded-lg font-semibold text-base transition-colors" style={{ background: isSubscribed ? "rgba(80, 80, 80, 1)" : "rgba(91, 0, 0, 1)" }}>
+                        <button
+                            onClick={handleSubscribe}
+                            className="px-6 py-2 cursor-pointer rounded-lg font-semibold text-base transition-colors"
+                            style={{ background: isSubscribed ? "rgb(91, 0, 0)" : "rgba(80, 80, 80, 1)" }}
+                        >
                             {isSubscribed ? "Abonné(e)" : "S'abonner"}
                         </button>
-                        <button onClick={handleWrite} className="px-6 py-2 rounded-lg cursor-pointer font-semibold text-base transition-colors" style={{ background: "rgba(80, 80, 80, 1)" }}>
+                        <button
+                            onClick={handleWrite}
+                            className="px-6 py-2 rounded-lg cursor-pointer font-semibold text-base transition-colors"
+                            style={{ background: "rgba(80, 80, 80, 1)" }}
+                        >
                             Écrire
                         </button>
                     </div>
