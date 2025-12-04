@@ -83,6 +83,7 @@ function GenerationPageContent() {
   const [selectedPoses, setSelectedPoses] = useState<number[]>([]);
   const [selectedAccessoires, setSelectedAccessoires] = useState<number[]>([]);
   const [selectedScenes, setSelectedScenes] = useState<number[]>([]);
+    const [textareaContent, setTextareaContent] = useState('');
 
   const topLinks = ['Vetements', 'Actions', 'Poses', 'Accessoires', 'Scenes'];
 
@@ -106,38 +107,60 @@ function GenerationPageContent() {
     setter(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
   };
 
- const handleGenerate = async () => {
-  setHasGeneratedImage(true);
+   const handleGenerate = async (mode: 'image' | 'video' = 'image') => {
+    setHasGeneratedImage(true);
 
-  const generatedImageUrl = imgSrc; 
-  const numberOfImages = 1;
+    const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
+    const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
+    const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
+    const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
+    const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
 
-  // 🔹 Convertir les IDs sélectionnés en labels
-const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
-const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
-const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
-const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
-const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
+    try {
+      if (mode === 'image') {
+        const generatedImageUrl = imgSrc;
+        const numberOfImages = 1;
 
+        const { data, error } = await supabase.from('image_generations').insert([
+          {
+            user_id: null,
+            vetements_names: vetementsLabels,
+            actions_names: actionsLabels,
+            poses_names: posesLabels,
+            accessoires_names: accessoiresLabels,
+            scenes_names: scenesLabels,
+            image_url: generatedImageUrl,
+            image_count: numberOfImages,
+            description: textareaContent, // <-- on enregistre le texte
+          },
+        ]);
 
-  // 🔹 Insertion dans Supabase
-  const { data, error } = await supabase.from('image_generations').insert([
-    {
-      user_id: null, // remplace par l’ID utilisateur connecté si disponible
-      vetements_names: vetementsLabels,
-      actions_names: actionsLabels,
-      poses_names: posesLabels,
-      accessoires_names: accessoiresLabels,
-      scenes_names: scenesLabels,
-      image_url: generatedImageUrl,
-      image_count: numberOfImages
-    },
-  ]);
+        if (error) console.error('❌ Erreur génération image:', error);
+        else console.log('✅ Image enregistrée:', data);
 
-  if (error) console.error('Erreur génération:', error);
-  else console.log('Génération enregistrée:', data);
-};
+      } else {
+        const generatedVideoUrl = "/videos/mock.mp4";
 
+        const { data, error } = await supabase.from('video_generations').insert([
+          {
+            user_id: null,
+            vetements_names: vetementsLabels,
+            actions_names: actionsLabels,
+            poses_names: posesLabels,
+            accessoires_names: accessoiresLabels,
+            scenes_names: scenesLabels,
+            video_url: generatedVideoUrl,
+            description: textareaContent, // <-- texte sauvegardé aussi pour vidéo
+          },
+        ]);
+
+        if (error) console.error('❌ Erreur génération vidéo:', error);
+        else console.log('✅ Vidéo enregistrée:', data);
+      }
+    } catch (err) {
+      console.error('❌ Erreur handleGenerate:', err);
+    }
+  };
    
 
   return (
@@ -188,8 +211,11 @@ const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id ==
             </div>
           )}
 
+          {/* ✅ Textarea liée à l'état */}
           <div className={`relative flex flex-col ${hasGeneratedImage ? 'w-1/3' : 'w-2/3'}`}>
             <textarea
+              value={textareaContent} // <-- valeur de l'état
+              onChange={(e) => setTextareaContent(e.target.value)} // <-- mise à jour de l'état
               className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${
                 hasGeneratedImage ? 'w-full h-[317px]' : 'w-160 h-[311px]'
               }`}
@@ -208,38 +234,51 @@ const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id ==
             </div>
           </div>
 
-          {hasGeneratedImage && (
-            <div className="w-1/3 flex flex-col items-start">
-              <h3 className="text-white text-xl font-bold mb-2">{mode === 'image' ? 'Images Générées' : 'Vidéos Générées'}</h3>
-              <Link
-                href="/generer/details-mock-video"
-                className="rounded-3xl overflow-hidden relative block cursor-pointer"
-                style={{ width: 240, height: 290 }}
-              >
-                {mode === 'image' ? (
-                  <Image src="/images/mock.png" alt="Image générée" layout="fill" objectFit="cover" className="rounded-3xl" />
-                ) : (
-                  <>
-                    <video
-                      src="/videos/mock.mp4"
-                      width="100%"
-                      height="100%"
-                      controls={false}
-                      loop
-                      muted
-                      className="object-cover rounded-3xl"
-                    />
-                    <div className="absolute inset-0 flex justify-center items-center z-10">
-                      <div className="w-16 h-16 flex justify-center items-center">
-                        <img src="/icons/playimage.png" alt="Play Icon" className="w-10 h-10" />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </Link>
-              <p className="text-gray-400 text-sm mt-2">Ici, vous pouvez trouver vos {mode === 'image' ? 'images' : 'vidéos'}.</p>
+         {hasGeneratedImage && (
+  <div className="w-1/3 flex flex-col items-start">
+    <h3 className="text-white text-xl font-bold mb-2">
+      {mode === 'image' ? 'Images Générées' : 'Vidéos Générées'}
+    </h3>
+
+    <Link
+      href={mode === 'image' ? '/generer/details-mock-image' : '/generer/details-mock-video'}
+      className="rounded-3xl overflow-hidden relative block cursor-pointer"
+      style={{ width: 240, height: 290 }}
+    >
+      {mode === 'image' ? (
+        <Image
+          src="/images/mock.png"
+          alt="Image générée"
+          layout="fill"
+          objectFit="cover"
+          className="rounded-3xl"
+        />
+      ) : (
+        <>
+          <video
+            src="/videos/mock.mp4"
+            width="100%"
+            height="100%"
+            loop
+            muted
+            className="object-cover rounded-3xl"
+          />
+          {/* Overlay bouton play */}
+          <div className="absolute inset-0 flex justify-center items-center z-10 pointer-events-none">
+            <div className="w-16 h-16 flex justify-center items-center">
+              <img src="/icons/playimage.png" alt="Play Icon" className="w-10 h-10" />
             </div>
-          )}
+          </div>
+        </>
+      )}
+    </Link>
+
+    <p className="text-gray-400 text-sm mt-2">
+      Ici, vous pouvez trouver vos {mode === 'image' ? 'images' : 'vidéos'}.
+    </p>
+  </div>
+)}
+
         </div>
 
         {/* Top links catégories */}
@@ -294,12 +333,11 @@ const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id ==
 
         {/* Bouton Générer */}
         <div className="flex justify-center mb-10">
-          <button
-            onClick={handleGenerate}
-            className="bg-red-600 hover:bg-red-700 text-white w-full py-4 rounded-2xl font-bold transition"
-          >
-            Générer {mode === 'video' ? 'une Vidéo' : 'une Image'}
-          </button>
+       <button onClick={() => handleGenerate(mode)}>
+  Générer {mode === 'video' ? 'une Vidéo' : 'une Image'}
+</button>
+
+
         </div>
       </div>
     </div>

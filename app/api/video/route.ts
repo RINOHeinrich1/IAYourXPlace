@@ -1,51 +1,45 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// 🔹 Création du client Supabase (lazy initialization to avoid build-time errors)
-function getSupabaseClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY! // nécessaire pour INSERT sécurisé
-  );
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // Service role obligatoire pour insert
+);
 
 export async function POST(req: Request) {
-  const supabase = getSupabaseClient();
   try {
     const body = await req.json();
 
     const {
       userId,
-      vetements,    // 🔹 labels, pas IDs
-      actions,
-      poses,
-      accessoires,
-      scenes,
-      imageUrl,
-      imageCount,
+      vetementsIds,
+      actionsIds,
+      posesIds,
+      accessoiresIds,
+      scenesIds,
+      videoUrl,
       description // 🔹 Nouveau champ pour le textarea
     } = body;
 
     // Vérification minimale
-    if (!imageUrl) {
+    if (!videoUrl) {
       return NextResponse.json(
-        { error: "imageUrl est obligatoire" },
+        { error: "videoUrl est obligatoire" },
         { status: 400 }
       );
     }
 
-    // 🔹 Insertion dans Supabase avec les noms corrects
+    // Insertion Supabase
     const { data, error } = await supabase
-      .from("image_generations")
+      .from("video_generations")
       .insert({
         user_id: userId || null,
-        vetements_names: vetements || [],
-        actions_names: actions || [],
-        poses_names: poses || [],
-        accessoires_names: accessoires || [],
-        scenes_names: scenes || [],
-        image_url: imageUrl,
-        image_count: imageCount || 1,
+        vetements_ids: vetementsIds || [],
+        actions_ids: actionsIds || [],
+        poses_ids: posesIds || [],
+        accessoires_ids: accessoiresIds || [],
+        scenes_ids: scenesIds || [],
+        video_url: videoUrl,
         description: description || "" // 🔹 insertion du texte
       })
       .select()
