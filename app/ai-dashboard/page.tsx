@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 // --- DONNÉES AI (Basé sur ia.jpg) ---
 const aiNavItems = [
@@ -129,6 +130,19 @@ const Header = () => (
 export default function AiDashboardPage() {
     const [aiCharacters, setAiCharacters] = useState<AIModel[]>([]);
     const [loading, setLoading] = useState(true);
+    const router = useRouter();
+
+    // Handler to navigate to live-action with character data
+    const handleLiveActionClick = (character: { id: string; name: string; src: string; slug: string; phrase: string }) => {
+        localStorage.setItem('liveActionCharacter', JSON.stringify({
+            id: character.id,
+            name: character.name,
+            avatar_url: character.src,
+            slug: character.slug,
+            description: character.phrase
+        }));
+        router.push('/live-action');
+    };
 
     useEffect(() => {
         const fetchAdminAI = async () => {
@@ -243,14 +257,17 @@ return(
             <h3 className="text-xl font-bold ml-2 mb-2 pointer-events-none">{model.name}</h3>
 
             {/* Console redirige vers Live */}
-            <Link href="/live-action" className="mt-2 ml-2 pointer-events-auto">
+            <button
+              onClick={() => handleLiveActionClick(model)}
+              className="mt-2 ml-2 pointer-events-auto cursor-pointer"
+            >
               <Image
                 src="/icons/console.png"
                 alt="Game icon"
                 width={52}
                 height={30}
               />
-            </Link>
+            </button>
           </div>
         </div>
       ))
@@ -312,12 +329,21 @@ return(
                 </p>
                 <div className="flex space-x-1 mt-1 text-sm text-white/80">
                {character.hasConsoleIcon && (
-                                    <Image
-                                        src="/icons/console.png"
-                                        alt="Game icon"
-                                        width={52}
-                                        height={30}
-                                    />
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleLiveActionClick(character);
+                                        }}
+                                        className="cursor-pointer hover:opacity-80 transition-opacity"
+                                    >
+                                        <Image
+                                            src="/icons/console.png"
+                                            alt="Game icon"
+                                            width={52}
+                                            height={30}
+                                        />
+                                    </button>
                                 )}
 
                                 {/* Icône 2 : NOUVELLE ICÔNE (Affichée si hasNewIcon est Vrai) */}

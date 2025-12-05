@@ -25,6 +25,20 @@ const nextConfig: NextConfig = {
                 port: '',
                 pathname: '/**',
             },
+            // 4. AliveAI API - for AI-generated character images
+            {
+                protocol: 'https',
+                hostname: 'api.aliveai.app',
+                port: '',
+                pathname: '/**',
+            },
+            // 5. AliveAI CDN - for AI-generated character images
+            {
+                protocol: 'https',
+                hostname: '*.aliveai.app',
+                port: '',
+                pathname: '/**',
+            },
         ],
     },
 };

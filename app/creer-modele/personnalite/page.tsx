@@ -7,6 +7,66 @@ import { supabase } from '../../../lib/supabaseClient';
 import { useModelStore } from '../../../store/useModelStore';
 import { useRouter } from 'next/navigation';
 
+// --- ALIVEAI IMAGE GENERATION ---
+interface GenerateCharacterResponse {
+  success: boolean;
+  promptId?: string;
+  seed?: string;
+  isComplete?: boolean;
+  imageUrl?: string;
+  error?: string;
+  message?: string;
+}
+
+async function generateCharacterImage(params: {
+  name: string;
+  gender: string;
+  age: number;
+  ethnicities: string[];
+  hairType: string;
+  hairColor: string;
+  eyeColor: string;
+  bodyType: string;
+  chestSize: string;
+  personality?: string[];
+}): Promise<{ imageUrl: string; promptId: string }> {
+  // Start the generation
+  const startResponse = await fetch('/api/aliveai/generate-character', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  const startData: GenerateCharacterResponse = await startResponse.json();
+
+  if (!startResponse.ok || !startData.success || !startData.promptId) {
+    throw new Error(startData.error || 'Erreur lors du démarrage de la génération');
+  }
+
+  const promptId = startData.promptId;
+
+  // Poll for completion (max 5 minutes with 3 second intervals)
+  const maxAttempts = 100;
+  const pollInterval = 3000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+    const statusResponse = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
+    const statusData: GenerateCharacterResponse = await statusResponse.json();
+
+    if (!statusResponse.ok) {
+      throw new Error(statusData.error || 'Erreur lors de la vérification du statut');
+    }
+
+    if (statusData.isComplete && statusData.imageUrl) {
+      return { imageUrl: statusData.imageUrl, promptId };
+    }
+  }
+
+  throw new Error('Timeout: La génération d\'image a pris trop de temps');
+}
+
 // --- CONFIGURATION ET STYLES ---
 const INPUT_GRADIENT_STYLE = {
   background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 100%)',
@@ -362,6 +422,11 @@ export default function FinalPage() {
   const [sexualPreferences, setSexualPreferences] = useState<string[]>(getArrayFromStore(storedSexualPreferences));
   const [voice, setVoice] = useState<string | null>(storedVoice);
 
+  // --- ALIVEAI GENERATION STATE ---
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<string>('');
+  const [generationError, setGenerationError] = useState<string | null>(null);
+
   // --- LOGIQUE MODAL ET OPTIONS ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'personality' | 'relationship' | 'profession' | 'sexualPrefs' | 'voice' | null>(null);
@@ -446,13 +511,44 @@ export default function FinalPage() {
     const hairColorString = Array.isArray(hairColor) ? hairColor.join(', ') : hairColor;
     const personalityString = Array.isArray(personality) ? personality.join(', ') : personality;
 
-    // Random mock avatar until real avatar generation is implemented
-    const avatarOptions = [
-      '/images/A.jpg', '/images/B.jpg', '/images/C.png', '/images/D.jpg',
-      '/images/E.jpg', '/images/F.jpg', '/images/G.jpg', '/images/H.jpg',
-      '/images/I.jpg', '/images/J.jpg', '/images/K.jpg', '/images/L.jpg', '/images/M.jpg',
-    ];
-    const randomAvatar = avatarOptions[Math.floor(Math.random() * avatarOptions.length)];
+    // Start AliveAI image generation
+    setIsGenerating(true);
+    setGenerationError(null);
+    setGenerationProgress('Démarrage de la génération d\'image...');
+
+    let avatarUrl: string;
+
+    try {
+      setGenerationProgress('Génération de l\'avatar en cours... Cela peut prendre quelques minutes.');
+
+      const result = await generateCharacterImage({
+        name: name.trim(),
+        gender,
+        age: Number(age),
+        ethnicities: Array.isArray(ethnicities) ? ethnicities : [ethnicities],
+        hairType: hairTypeString,
+        hairColor: hairColorString,
+        eyeColor: eyeColor,
+        bodyType: bodyTypeString,
+        chestSize: chestSizeString,
+        personality,
+      });
+
+      avatarUrl = result.imageUrl;
+      setGenerationProgress('Image générée avec succès !');
+    } catch (error) {
+      console.error('Erreur AliveAI:', error);
+      setGenerationError(error instanceof Error ? error.message : 'Erreur lors de la génération');
+
+      // Fallback to random avatar if AliveAI fails
+      const avatarOptions = [
+        '/images/A.jpg', '/images/B.jpg', '/images/C.png', '/images/D.jpg',
+        '/images/E.jpg', '/images/F.jpg', '/images/G.jpg', '/images/H.jpg',
+        '/images/I.jpg', '/images/J.jpg', '/images/K.jpg', '/images/L.jpg', '/images/M.jpg',
+      ];
+      avatarUrl = avatarOptions[Math.floor(Math.random() * avatarOptions.length)];
+      setGenerationProgress('Utilisation d\'un avatar par défaut...');
+    }
 
     const systemPrompt = `Tu es ${name}, une ${gender === 'femmes' ? 'femme' : 'homme'} de ${age} ans d'origine ${Array.isArray(ethnicities) ? ethnicities.join(' et ') : ethnicities}. Tu as les cheveux ${hairTypeString} de couleur ${hairColorString} et des yeux ${eyeColor}. Ta personnalité est ${personalityString}. Tu travailles comme ${Array.isArray(profession) ? profession.join(', ') : profession}. Tu es ${Array.isArray(relationship) ? relationship.join(', ') : relationship}. Tu parles avec une voix ${voice || 'naturelle'}.`;
 
@@ -462,7 +558,7 @@ export default function FinalPage() {
       personality: personalityString,
       systemPrompt,
       greetings: [`Salut ! Je suis ${name}, ravie de te rencontrer ! 💕`],
-      avatar_url: randomAvatar,
+      avatar_url: avatarUrl,
       gender,
       ethnicities,
       age: Number(age),
@@ -480,11 +576,15 @@ export default function FinalPage() {
       is_public: false,
     };
 
+    setGenerationProgress('Enregistrement du modèle...');
+
     const { data, error } = await supabase
       .from('ai_models')
       .insert([aiModelData])
       .select()
       .single();
+
+    setIsGenerating(false);
 
     if (error) {
       console.error('Erreur Supabase:', error);
@@ -574,14 +674,32 @@ export default function FinalPage() {
           </div>
 
           {/* BOUTON TERMINER (Centré) */}
-          <div className="mt-16 pb-10">
+          <div className="mt-16 pb-10 flex flex-col items-center">
+            {/* Generation Progress */}
+            {isGenerating && (
+              <div className="mb-6 text-center">
+                <div className="flex items-center justify-center mb-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+                </div>
+                <p className="text-gray-300">{generationProgress}</p>
+              </div>
+            )}
+
+            {/* Generation Error */}
+            {generationError && !isGenerating && (
+              <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg text-yellow-200 text-sm text-center max-w-md">
+                <p>⚠️ {generationError}</p>
+                <p className="text-xs mt-1">Un avatar par défaut sera utilisé.</p>
+              </div>
+            )}
+
             <button
               onClick={handleSubmit}
-              disabled={!isFormValid}
-              className={`w-[250px] py-4 rounded-xl text-white text-xl font-bold transition-colors 
-                            ${isFormValid ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 cursor-not-allowed text-gray-400'}`}
+              disabled={!isFormValid || isGenerating}
+              className={`w-[250px] py-4 rounded-xl text-white text-xl font-bold transition-colors
+                            ${isFormValid && !isGenerating ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 cursor-not-allowed text-gray-400'}`}
             >
-              Terminer et enregistrer
+              {isGenerating ? 'Génération en cours...' : 'Terminer et enregistrer'}
             </button>
           </div>
 

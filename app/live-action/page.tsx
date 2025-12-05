@@ -1,15 +1,39 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Gamepad2, HandCoins } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+interface LiveActionCharacter {
+  id: string;
+  name: string;
+  avatar_url: string;
+  slug: string;
+  description: string;
+}
+
 export default function LiveActionPage() {
   const [isOpen, setIsOpen] = useState(true);
+  const [character, setCharacter] = useState<LiveActionCharacter | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    // Retrieve character data from localStorage
+    const storedCharacter = localStorage.getItem('liveActionCharacter');
+    if (storedCharacter) {
+      try {
+        const parsedCharacter = JSON.parse(storedCharacter);
+        setCharacter(parsedCharacter);
+      } catch (error) {
+        console.error('Error parsing character data:', error);
+      }
+    }
+  }, []);
 
   const handleClose = () => {
     setIsOpen(false);
+    // Clean up localStorage when closing
+    localStorage.removeItem('liveActionCharacter');
     setTimeout(() => {
       router.push("/ai-dashboard");
     }, 100);
@@ -72,20 +96,22 @@ export default function LiveActionPage() {
             {/* Profil TRÈS ROND */}
             <div className="absolute top-4 left-4 z-20 flex items-center space-x-3">
               <Image
-                src="/images/group.png"
-                alt="Profile"
+                src={character?.avatar_url || "/images/group.png"}
+                alt={character?.name || "Profile"}
                 width={64}
                 height={64}
-                className="rounded-full border-2 border-white"
+                className="rounded-full border-2 border-white object-cover"
                 style={{ borderRadius: "999px" }}
               />
-              <span className="text-white font-semibold text-base">Luna</span>
+              <span className="text-white font-semibold text-base">
+                {character?.name || "Personnage"}
+              </span>
             </div>
 
             {/* Grande image */}
             <Image
-              src="/images/group.PNG"
-              alt="Live Model"
+              src={character?.avatar_url || "/images/group.PNG"}
+              alt={character?.name || "Live Model"}
               fill
               className="object-cover rounded-2xl"
             />
@@ -97,7 +123,9 @@ export default function LiveActionPage() {
             {/* Header */}
             <div className="flex items-center space-x-2 mb-4">
               <Gamepad2 className="w-5 h-5 text-red-500" />
-              <h3 className="text-white text-lg font-bold">Action en Direct</h3>
+              <h3 className="text-white text-lg font-bold">
+                Action en Direct {character?.name ? `- ${character.name}` : ""}
+              </h3>
             </div>
 
             {/* Actions */}
