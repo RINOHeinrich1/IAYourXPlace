@@ -224,9 +224,9 @@ export default function CollectionPage() {
                   style={{ background: 'rgba(67, 66, 66, 1)' }}
                 />
 
-                {/* Image devant - Link to profile or video */}
+                {/* Image devant - Link to character detail view with breadcrumb */}
                 <Link
-                  href={item.modelId ? `/profil/${encodeURIComponent(item.name.toLowerCase().replace(/\s+/g, '-'))}?id=${item.modelId}` : `/video`}
+                  href={item.modelId ? `/video/${item.modelId}` : `/video`}
                   className="block relative w-full h-full"
                 >
                   <Image

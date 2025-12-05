@@ -14,12 +14,7 @@ const aiNavItems = [
     { name: 'Mes IA', active: false, iconPath: '/images/mesia.png', href: '/mesia' },
 ];
 
-const liveModels = [
-    { name: 'Regina', src: '/images/Group.png' },
-    { name: 'Esther', src: '/images/Groupa.png' },
-    { name: 'Colleen', src: '/images/Group.png' },
-    { name: 'Dianne', src: '/images/Groupa.png' },
-];
+// liveModels removed - now using liveActionCharacters filtered from AI models
 
 // Interface for AI models fetched from the database
 interface AIModel {
@@ -199,6 +194,12 @@ export default function AiDashboardPage() {
         };
     });
 
+    // Filter characters for "Se lancer dans EN DIRECT Action" section
+    // Only show first 4 characters that have ONLY the console/camera icon (no microphone)
+    const liveActionCharacters = displayCharacters
+        .filter(char => char.hasConsoleIcon === true && char.hasNewIcon === false)
+        .slice(0, 4);
+
 return(
  <div className="min-h-screen bg-black text-white">
 <Sidebar />
@@ -207,48 +208,55 @@ return(
  {/* Main Content Area: ml-[240px] correspond à la largeur de la Sidebar */}
       <main className={`ml-[240px] pt-7 p-8`}>
 
-        {/* Section Live Models */}
+        {/* Section Se lancer dans EN DIRECT Action - Shows only AI models with console icon only */}
  <section className="mb-12 ml-17">
   <div className="flex space-x-6 overflow-x-auto pb-4 custom-scrollbar-hide">
-    {liveModels.map((model, index) => (
-      <div
-        key={index}
-        className="flex-shrink-0 w-56 h-72 rounded-xl overflow-hidden relative"
-      >
-        {/* Image principale redirige vers Profil */}
-        <Link href="/profil" className="relative block w-full h-full z-0">
-          <Image
-            src={model.src}
-            alt={model.name}
-            fill
-            style={{ objectFit: 'cover' }}
-            className="object-cover"
-          />
-        </Link>
-
-        <div className="absolute inset-0 p-4 flex flex-col justify-end text-white to-transparent z-10 pointer-events-none">
-          <Image 
-            src={'/icons/liveai.png'}
-            alt="Icône Public"
-            width={26}
-            height={26}
-            className="absolute top-2 right-2 rounded-full pointer-events-auto"
-          />
-
-          <h3 className="text-xl font-bold ml-2 mb-2 pointer-events-none">{model.name}</h3>
-
-          {/* Console redirige vers Live */}
-          <Link href="/live-action" className="mt-2 ml-2 pointer-events-auto">
-            <Image 
-              src="/icons/console.png" 
-              alt="Game icon" 
-              width={52} 
-              height={30} 
+    {liveActionCharacters.length > 0 ? (
+      liveActionCharacters.map((model) => (
+        <div
+          key={model.id}
+          className="flex-shrink-0 w-56 h-72 rounded-xl overflow-hidden relative"
+        >
+          {/* Image principale redirige vers Profil */}
+          <Link
+            href={`/profil/${model.slug}?id=${model.id}`}
+            className="relative block w-full h-full z-0"
+          >
+            <Image
+              src={model.src}
+              alt={model.name}
+              fill
+              style={{ objectFit: 'cover' }}
+              className="object-cover"
             />
           </Link>
+
+          <div className="absolute inset-0 p-4 flex flex-col justify-end text-white to-transparent z-10 pointer-events-none">
+            <Image
+              src={'/icons/liveai.png'}
+              alt="Icône Public"
+              width={26}
+              height={26}
+              className="absolute top-2 right-2 rounded-full pointer-events-auto"
+            />
+
+            <h3 className="text-xl font-bold ml-2 mb-2 pointer-events-none">{model.name}</h3>
+
+            {/* Console redirige vers Live */}
+            <Link href="/live-action" className="mt-2 ml-2 pointer-events-auto">
+              <Image
+                src="/icons/console.png"
+                alt="Game icon"
+                width={52}
+                height={30}
+              />
+            </Link>
+          </div>
         </div>
-      </div>
-    ))}
+      ))
+    ) : (
+      <p className="text-gray-400">Aucun modèle disponible pour cette section</p>
+    )}
   </div>
 </section>
         {/* Section Personnages myModèle AI */}
