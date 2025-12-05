@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       bodyType,
       chestSize,
       personality,
+      customPrompt, // New: user's custom prompt for the image
     } = body;
 
     // Validate required fields
@@ -49,8 +50,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build appearance description
-    const appearance = buildAppearanceDescription({
+    // Build appearance description from character attributes
+    const baseAppearance = buildAppearanceDescription({
       gender,
       age: Number(age),
       ethnicities: Array.isArray(ethnicities) ? ethnicities : [ethnicities],
@@ -61,11 +62,16 @@ export async function POST(request: NextRequest) {
       chestSize: chestSize || 'medium',
     });
 
-    // Add personality to appearance if provided
-    let fullAppearance = appearance;
+    // Build full appearance: base + personality + custom prompt
+    let fullAppearance = baseAppearance;
     if (personality) {
       const personalityStr = Array.isArray(personality) ? personality.join(', ') : personality;
       fullAppearance += `, ${personalityStr} expression`;
+    }
+
+    // Add custom prompt if provided - this allows for more creative/improvised generations
+    if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim()) {
+      fullAppearance += `, ${customPrompt.trim()}`;
     }
 
     // Create AliveAI prompt request
@@ -135,10 +141,11 @@ export async function GET(request: NextRequest) {
 
     // Check if we have media results
     const imageMedia = result.medias?.find(m => m.mediaType === 'IMAGE');
-    
+
     if (imageMedia) {
       return NextResponse.json({
         success: true,
+        status: 'completed',
         isComplete: true,
         imageUrl: imageMedia.mediaUrl,
         mediaId: imageMedia.id,
@@ -149,6 +156,7 @@ export async function GET(request: NextRequest) {
     // Still processing
     return NextResponse.json({
       success: true,
+      status: 'processing',
       isComplete: false,
       promptId: result.promptId,
       message: 'Génération en cours...',
