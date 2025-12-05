@@ -109,17 +109,27 @@ export default function GenererPage() {
         <h2 className="text-white font-bold mb-6">Choisir un personnage</h2>
 
         {/* Petits liens */}
-        <div className="flex space-x-4 mb-15 mt-11">
-          {posts.map((post, index) => (
-            <Link
-              key={post.id}
-              href="#"
-              className={`relative pb-1 text-sm font-medium ${index === 0 ? 'text-white font-bold after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-red-600' : 'text-gray-500 hover:text-white'}`}
-            >
-              {post.title}
-            </Link>
-          ))}
-        </div>
+<div className="flex space-x-4 mb-15 mt-11">
+  {posts.map((post, index) => (
+    <Link
+      key={post.id}
+      href={
+        post.title === 'Au feeling'
+          ? '/creer-modele'
+          : post.title === 'Mes IA'
+          ? '/mesia'
+          : '/post'
+      }
+      className={`relative pb-1 text-sm font-medium ${
+        index === 0
+          ? 'text-white font-bold after:absolute after:left-0 after:bottom-0 after:w-full after:h-[2px] after:bg-red-600'
+          : 'text-gray-500 hover:text-white'
+      }`}
+    >
+      {post.title}
+    </Link>
+  ))}
+</div>
 
         <div className="p-10 bg-black min-h-screen text-white">
           {/* Grille d’images */}
