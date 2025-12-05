@@ -50,8 +50,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build appearance description from character attributes
-    const baseAppearance = buildAppearanceDescription({
+    // Build appearance description with custom prompt included
+    const fullAppearance = buildAppearanceDescription({
       gender,
       age: Number(age),
       ethnicities: Array.isArray(ethnicities) ? ethnicities : [ethnicities],
@@ -60,24 +60,27 @@ export async function POST(request: NextRequest) {
       eyeColor: eyeColor || 'brown',
       bodyType: bodyType || 'slim',
       chestSize: chestSize || 'medium',
+      customPrompt: customPrompt, // Include custom prompt in appearance
     });
 
-    // Build full appearance: base + personality + custom prompt
-    let fullAppearance = baseAppearance;
+    // Add personality expression if provided
+    let appearanceWithPersonality = fullAppearance;
     if (personality) {
       const personalityStr = Array.isArray(personality) ? personality.join(', ') : personality;
-      fullAppearance += `, ${personalityStr} expression`;
+      appearanceWithPersonality = fullAppearance.replace(
+        ', high quality, photorealistic',
+        `, ${personalityStr} expression, high quality, photorealistic`
+      );
     }
 
-    // Add custom prompt if provided - this allows for more creative/improvised generations
-    if (customPrompt && typeof customPrompt === 'string' && customPrompt.trim()) {
-      fullAppearance += `, ${customPrompt.trim()}`;
-    }
+    console.log('[AliveAI] Full appearance prompt:', appearanceWithPersonality);
+    console.log('[AliveAI] Custom prompt received:', customPrompt);
 
     // Create AliveAI prompt request
+    // Use custom prompt in BOTH appearance AND scene fields for maximum effect
     const promptRequest: CreatePromptRequest = {
       name,
-      appearance: fullAppearance,
+      appearance: appearanceWithPersonality,
       detailLevel: 'HIGH',
       gender: mapGender(gender),
       fromLocation: mapEthnicityToLocation(
@@ -88,7 +91,11 @@ export async function POST(request: NextRequest) {
       model: 'REALISM',
       aspectRatio: 'PORTRAIT',
       blockExplicitContent: false,
+      // Set scene field with custom prompt for additional context
+      scene: customPrompt && customPrompt.trim() ? customPrompt.trim() : undefined,
     };
+
+    console.log('[AliveAI] Full request:', JSON.stringify(promptRequest, null, 2));
 
     // Create the prompt with AliveAI
     const response = await createPrompt(promptRequest);

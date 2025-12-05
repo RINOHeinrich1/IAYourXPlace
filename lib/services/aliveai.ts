@@ -177,6 +177,10 @@ export function mapGender(gender: string): Gender {
 
 /**
  * Build an appearance description from character attributes
+ *
+ * @param params - Character physical attributes
+ * @param customPrompt - Optional custom prompt for accessories, clothing, pose, etc.
+ * @returns Formatted appearance description for AliveAI API
  */
 export function buildAppearanceDescription(params: {
   gender: string;
@@ -187,6 +191,7 @@ export function buildAppearanceDescription(params: {
   eyeColor: string;
   bodyType: string;
   chestSize: string;
+  customPrompt?: string;
 }): string {
   const genderWord = params.gender === 'femmes' ? 'woman' : 'man';
   const ethnicityDesc = params.ethnicities.join(' and ');
@@ -203,7 +208,12 @@ export function buildAppearanceDescription(params: {
     parts.push(`${params.chestSize} chest`);
   }
 
-  return parts.join(', ') + ', full body, high quality, photorealistic';
+  // Add custom prompt BEFORE the quality modifiers so it's more prominent
+  if (params.customPrompt && params.customPrompt.trim()) {
+    parts.push(params.customPrompt.trim());
+  }
+
+  return parts.join(', ') + ', high quality, photorealistic';
 }
 
 /**
