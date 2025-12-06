@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       bodyType,
       chestSize,
       personality,
+      customPrompt, // New: user's custom prompt for the image
     } = body;
 
     // Validate required fields
@@ -49,8 +50,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build appearance description
-    const appearance = buildAppearanceDescription({
+    // Build appearance description with custom prompt included
+    const fullAppearance = buildAppearanceDescription({
       gender,
       age: Number(age),
       ethnicities: Array.isArray(ethnicities) ? ethnicities : [ethnicities],
@@ -59,19 +60,27 @@ export async function POST(request: NextRequest) {
       eyeColor: eyeColor || 'brown',
       bodyType: bodyType || 'slim',
       chestSize: chestSize || 'medium',
+      customPrompt: customPrompt, // Include custom prompt in appearance
     });
 
-    // Add personality to appearance if provided
-    let fullAppearance = appearance;
+    // Add personality expression if provided
+    let appearanceWithPersonality = fullAppearance;
     if (personality) {
       const personalityStr = Array.isArray(personality) ? personality.join(', ') : personality;
-      fullAppearance += `, ${personalityStr} expression`;
+      appearanceWithPersonality = fullAppearance.replace(
+        ', high quality, photorealistic',
+        `, ${personalityStr} expression, high quality, photorealistic`
+      );
     }
 
+    console.log('[AliveAI] Full appearance prompt:', appearanceWithPersonality);
+    console.log('[AliveAI] Custom prompt received:', customPrompt);
+
     // Create AliveAI prompt request
+    // Use custom prompt in BOTH appearance AND scene fields for maximum effect
     const promptRequest: CreatePromptRequest = {
       name,
-      appearance: fullAppearance,
+      appearance: appearanceWithPersonality,
       detailLevel: 'HIGH',
       gender: mapGender(gender),
       fromLocation: mapEthnicityToLocation(
@@ -82,7 +91,11 @@ export async function POST(request: NextRequest) {
       model: 'REALISM',
       aspectRatio: 'PORTRAIT',
       blockExplicitContent: false,
+      // Set scene field with custom prompt for additional context
+      scene: customPrompt && customPrompt.trim() ? customPrompt.trim() : undefined,
     };
+
+    console.log('[AliveAI] Full request:', JSON.stringify(promptRequest, null, 2));
 
     // Create the prompt with AliveAI
     const response = await createPrompt(promptRequest);
@@ -135,10 +148,11 @@ export async function GET(request: NextRequest) {
 
     // Check if we have media results
     const imageMedia = result.medias?.find(m => m.mediaType === 'IMAGE');
-    
+
     if (imageMedia) {
       return NextResponse.json({
         success: true,
+        status: 'completed',
         isComplete: true,
         imageUrl: imageMedia.mediaUrl,
         mediaId: imageMedia.id,
@@ -149,6 +163,7 @@ export async function GET(request: NextRequest) {
     // Still processing
     return NextResponse.json({
       success: true,
+      status: 'processing',
       isComplete: false,
       promptId: result.promptId,
       message: 'Génération en cours...',

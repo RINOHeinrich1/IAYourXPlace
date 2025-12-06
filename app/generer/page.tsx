@@ -52,8 +52,7 @@ const Sidebar = () => (
   </div>
 );
 
-interface ImageItem { id: number; name: string; src: string; }
-interface AIModel { id: string; name: string; avatar_url?: string; age?: number; }
+interface AIModel { id: string; name: string; avatar_url?: string; age?: number; description?: string; }
 type TabType = 'post' | 'au-feeling' | 'mes-ia';
 
 export default function GenererPage() {
@@ -63,16 +62,9 @@ export default function GenererPage() {
     { id: 'mes-ia', title: 'Mes IA' },
   ];
 
-  const images: ImageItem[] = [
-    { id: 1, name: 'Mila nowak', src: '/images/generer1.jpg' },
-    { id: 2, name: 'Bessie', src: '/images/generer2.jpg' },
-    { id: 3, name: 'Aurora', src: '/images/generer3.jpg' },
-    { id: 4, name: 'Luna', src: '/images/generer4.jpg' },
-    { id: 5, name: 'Mila', src: '/images/generer5.jpg' },
-    { id: 6, name: 'Nova', src: '/images/genener6.jpg' },
-    { id: 7, name: 'Iris', src: '/images/generer7.jpg' },
-    { id: 8, name: 'Violet', src: '/images/generer8.jpg' },
-  ];
+  // State for admin AI characters (POST tab)
+  const [adminAIModels, setAdminAIModels] = useState<AIModel[]>([]);
+  const [loadingAdminModels, setLoadingAdminModels] = useState(true);
 
   const ethnicOrigins = [
     { name: 'Occidental', image: '/images/origine1.png' },
@@ -82,7 +74,7 @@ export default function GenererPage() {
   ];
 
   const [activeTab, setActiveTab] = useState<TabType>('post');
-  const [selectedImage, setSelectedImage] = useState<ImageItem | null>(null);
+  const [selectedModel, setSelectedModel] = useState<AIModel | null>(null);
   const [selectedEthnicities, setSelectedEthnicities] = useState<string[]>([]);
   const [age, setAge] = useState<number>(22);
   const [userAIModels, setUserAIModels] = useState<AIModel[]>([]);
@@ -90,6 +82,25 @@ export default function GenererPage() {
 
   const router = useRouter();
 
+  // Fetch admin AI models for POST tab on mount
+  useEffect(() => {
+    const fetchAdminAIModels = async () => {
+      setLoadingAdminModels(true);
+      try {
+        const response = await fetch('/api/ai-profiles?adminOnly=true');
+        const data = await response.json();
+        if (data.profiles) {
+          setAdminAIModels(data.profiles);
+        }
+      } catch (error) {
+        console.error('Error fetching admin AI models:', error);
+      }
+      setLoadingAdminModels(false);
+    };
+    fetchAdminAIModels();
+  }, []);
+
+  // Fetch user AI models for "Mes IA" tab
   useEffect(() => {
     if (activeTab === 'mes-ia') {
       const fetchUserAIModels = async () => {
@@ -109,17 +120,33 @@ export default function GenererPage() {
     }
   }, [activeTab]);
 
-  const handleSelectAndGo = (img: ImageItem) => {
-    localStorage.setItem('selectedCharacter', JSON.stringify(img));
-    router.push('/generation');
+  // Helper to create URL-friendly slug from name
+  const createSlug = (name: string): string => {
+    return name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove accents
+      .replace(/[^a-z0-9]+/g, '-')     // Replace non-alphanumeric with hyphens
+      .replace(/^-+|-+$/g, '');        // Remove leading/trailing hyphens
+  };
+
+  // Handle character selection and redirect to generation page
+  const handleSelectCharacter = (model: AIModel) => {
+    const slug = createSlug(model.name);
+    localStorage.setItem('selectedCharacter', JSON.stringify({
+      id: model.id,
+      name: model.name,
+      src: model.avatar_url || '/images/mock.png',
+      slug: slug
+    }));
+    router.push(`/generation/${slug}`);
   };
 
   const handleSelectAIModel = (model: AIModel) => {
-    localStorage.setItem('selectedCharacter', JSON.stringify({ id: model.id, name: model.name, src: model.avatar_url || '/images/mock.png' }));
-    router.push('/generation');
+    handleSelectCharacter(model);
   };
 
-  const closePopup = () => setSelectedImage(null);
+  const closePopup = () => setSelectedModel(null);
 
   const toggleEthnicity = (name: string) => {
     if (selectedEthnicities.includes(name)) {
@@ -177,35 +204,70 @@ export default function GenererPage() {
         {/* TAB CONTENT */}
         <div className="bg-black min-h-[60vh] text-white">
 
-          {/* POST TAB - Default character grid */}
+          {/* POST TAB - Admin AI characters from database */}
           {activeTab === 'post' && (
             <div className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-9">
-                {images.map((img) => (
-                  <div key={img.id} className="relative w-55 h-66 rounded-5xl overflow-hidden cursor-pointer" onClick={() => setSelectedImage(img)}>
-                    <Image src={img.src} alt={img.name} fill className="object-cover rounded-4xl" />
+              {loadingAdminModels ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
+                  <p className="text-xl text-gray-400 ml-4">Chargement des personnages...</p>
+                </div>
+              ) : adminAIModels.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-9">
+                  {adminAIModels.map((model) => (
                     <div
-                      className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[170px] text-center py-2 rounded-3xl"
-                      style={{ background: 'linear-gradient(199deg, rgba(255,255,255,0.25) 88%, rgba(255,255,255,0.1) 190%)' }}
+                      key={model.id}
+                      className="relative w-55 h-66 rounded-5xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-red-500 transition-all"
+                      onClick={() => setSelectedModel(model)}
                     >
-                      <span className="text-white font-semibold text-sm">{img.name}</span>
+                      {model.avatar_url ? (
+                        <Image src={model.avatar_url} alt={model.name} fill className="object-cover rounded-4xl" />
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-red-600/30 to-purple-600/30 rounded-4xl" />
+                      )}
+                      <div
+                        className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[170px] text-center py-2 rounded-3xl"
+                        style={{ background: 'linear-gradient(199deg, rgba(255,255,255,0.25) 88%, rgba(255,255,255,0.1) 190%)' }}
+                      >
+                        <span className="text-white font-semibold text-sm">{model.name}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              {selectedImage && (
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <p className="text-xl text-gray-400">Aucun personnage disponible.</p>
+                </div>
+              )}
+              {selectedModel && (
                 <div
                   className="fixed bottom-0 ml-38 left-1/2 -translate-x-1/2 w-[1027px] h-[346px] rounded-t-[32px] backdrop-blur-[40px] p-6 z-50"
                   style={{ background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 100%)' }}
                 >
-                  <div className="flex flex-col -mt-22 items-center justify-center h-full relative">
+                  <div className="flex flex-col items-center justify-center h-full relative">
+                    {/* Character preview */}
+                    <div className="flex items-center gap-6 mb-6 -mt-16">
+                      <div className="relative w-32 h-40 rounded-2xl overflow-hidden">
+                        {selectedModel.avatar_url ? (
+                          <Image src={selectedModel.avatar_url} alt={selectedModel.name} fill className="object-cover" />
+                        ) : (
+                          <div className="absolute inset-0 bg-gradient-to-br from-red-600/30 to-purple-600/30" />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="text-white text-2xl font-bold">{selectedModel.name}</h3>
+                        {selectedModel.description && (
+                          <p className="text-gray-300 text-sm mt-1 max-w-md">{selectedModel.description}</p>
+                        )}
+                      </div>
+                    </div>
                     <button
-                      onClick={() => selectedImage && handleSelectAndGo(selectedImage)}
-                      className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-red-700 transition"
+                      onClick={() => selectedModel && handleSelectCharacter(selectedModel)}
+                      className="bg-red-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-red-700 transition"
                     >
-                      Selectionner
+                      Sélectionner ce personnage
                     </button>
-                    <button onClick={closePopup} className="absolute top-4 right-4 text-white text-xl font-bold">X</button>
+                    <button onClick={closePopup} className="absolute top-4 right-4 text-white text-xl font-bold hover:text-red-400 transition">✕</button>
                   </div>
                 </div>
               )}

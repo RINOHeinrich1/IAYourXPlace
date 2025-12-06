@@ -26,6 +26,8 @@ interface AIModel {
     avatar_url?: string;
     created_at: string;
     created_by: string;
+    has_voice?: boolean;      // Microphone icon
+    has_live_action?: boolean; // Console icon
 }
 
 
@@ -173,43 +175,23 @@ export default function AiDashboardPage() {
         phrase: string;
     }
 
-    // Helper function to generate deterministic random icon flags based on model id
-    // Uses a simple hash to ensure consistent icon display for each character
-    const getIconFlags = (id: string): { hasConsoleIcon: boolean; hasNewIcon: boolean } => {
-        // Create a simple hash from the id string
-        let hash = 0;
-        for (let i = 0; i < id.length; i++) {
-            hash = ((hash << 5) - hash) + id.charCodeAt(i);
-            hash = hash & hash; // Convert to 32bit integer
-        }
-        // Use hash to determine icon flags (4 possible combinations)
-        const iconPattern = Math.abs(hash) % 4;
-        switch (iconPattern) {
-            case 0: return { hasConsoleIcon: true, hasNewIcon: true };   // Both icons
-            case 1: return { hasConsoleIcon: true, hasNewIcon: false };  // Camera only
-            case 2: return { hasConsoleIcon: false, hasNewIcon: true };  // Microphone only
-            case 3: return { hasConsoleIcon: false, hasNewIcon: false }; // No icons
-            default: return { hasConsoleIcon: true, hasNewIcon: true };
-        }
-    };
-
     // Convert AIModel to display format - NO FALLBACK DATA, only real database models
-    // Icons vary randomly across characters based on their unique ID
+    // Icons are now controlled by database fields: has_live_action (console) and has_voice (microphone)
     const displayCharacters: DisplayCharacter[] = aiCharacters.map((model, index) => {
-        const iconFlags = getIconFlags(model.id);
         return {
             id: model.id,
             src: model.avatar_url || `/images/${String.fromCharCode(65 + (index % 12))}.jpg`,
             name: model.name,
-            hasConsoleIcon: iconFlags.hasConsoleIcon,
-            hasNewIcon: iconFlags.hasNewIcon,
+            hasConsoleIcon: model.has_live_action ?? false,  // Console icon from database
+            hasNewIcon: model.has_voice ?? false,            // Microphone icon from database
             slug: model.name.toLowerCase().replace(/\s+/g, '-'),
             phrase: model.description || model.personality || 'Une IA créée par les administrateurs'
         };
     });
 
     // Filter characters for "Se lancer dans EN DIRECT Action" section
-    // Only show first 4 characters that have ONLY the console/camera icon (no microphone)
+    // Only show characters that have the live action flag (console icon)
+    // Live Action section shows characters with ONLY console icon (no microphone)
     const liveActionCharacters = displayCharacters
         .filter(char => char.hasConsoleIcon === true && char.hasNewIcon === false)
         .slice(0, 4);
