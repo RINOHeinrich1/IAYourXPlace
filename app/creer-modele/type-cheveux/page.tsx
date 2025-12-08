@@ -65,13 +65,13 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSe
 
         {/* Image principale : Conserve la logique de l'image de remplacement /images/j.jpg si sélectionné */}
         <Image
-            src={isSelected ? "/images/j.jpg" : imagePath}
+            src={isSelected ? "/images/J.jpg" : imagePath}
             alt={label}
             fill
             className={`object-cover transition-all duration-300
                 ${isSelected ? "opacity-100 blur-0" : "opacity-48 -blur-[2px]"} 
-            `}
-            // NOTE: J'ai corrigé -blur-[2px] en blur-[2px] pour que Tailwind fonctionne correctement.
+            `} 
+         
         />
 
         {/* Label */}
