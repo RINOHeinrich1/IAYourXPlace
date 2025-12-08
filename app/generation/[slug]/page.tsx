@@ -82,7 +82,9 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageCount, setImageCount] = useState(1);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState('Vetements');
@@ -142,61 +144,76 @@ function GenerationSlugContent({ slug }: { slug: string }) {
     return parts.join(', ');
   };
 
+  const generateSingleImage = async (): Promise<string> => {
+    if (!character) throw new Error('Personnage non trouvé');
+
+    const customPrompt = buildFullPrompt();
+
+    const response = await fetch('/api/aliveai/generate-character', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: character.name,
+        gender: character.gender || 'femmes',
+        age: character.age || 25,
+        ethnicities: character.ethnicities || ['Occidental'],
+        hairType: character.hair_type || 'straight',
+        hairColor: character.hair_color || 'brown',
+        eyeColor: character.eye_color || 'brown',
+        bodyType: character.body_type || 'slim',
+        chestSize: character.chest_size || 'medium',
+        personality: character.personality,
+        customPrompt: customPrompt,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Erreur de génération');
+
+    const { promptId } = data;
+
+    let attempts = 0;
+    const maxAttempts = 60;
+    while (attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 5000));
+      const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
+      const statusData = await statusRes.json();
+
+      if (statusData.status === 'completed' && statusData.imageUrl) {
+        return statusData.imageUrl;
+      } else if (statusData.status === 'failed') {
+        throw new Error('La génération a échoué');
+      }
+      attempts++;
+    }
+
+    throw new Error('Timeout: la génération a pris trop de temps');
+  };
+
   const handleGenerate = async () => {
     if (!character) return;
 
     setIsGenerating(true);
     setGenerationError(null);
-    setGeneratedImageUrl(null);
-    setGenerationProgress('Préparation de la génération...');
+    setGeneratedImages([]);
+    setCurrentImageIndex(0);
 
     try {
-      const customPrompt = buildFullPrompt();
+      const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
+      const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
+      const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
+      const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
+      const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
 
-      // Send character attributes + custom prompt to AliveAI
-      const response = await fetch('/api/aliveai/generate-character', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: character.name,
-          gender: character.gender || 'femmes',
-          age: character.age || 25,
-          ethnicities: character.ethnicities || ['Occidental'],
-          hairType: character.hair_type || 'straight',
-          hairColor: character.hair_color || 'brown',
-          eyeColor: character.eye_color || 'brown',
-          bodyType: character.body_type || 'slim',
-          chestSize: character.chest_size || 'medium',
-          personality: character.personality,
-          customPrompt: customPrompt, // User's selections + textarea
-        }),
-      });
+      const generatedImageUrls: string[] = [];
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erreur de génération');
-
-      const { promptId } = data;
-      setGenerationProgress('Image en cours de génération...');
-
-      // Poll for completion
-      let attempts = 0;
-      const maxAttempts = 60;
-      while (attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 5000));
-        const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
-        const statusData = await statusRes.json();
-
-        if (statusData.status === 'completed' && statusData.imageUrl) {
-          setGeneratedImageUrl(statusData.imageUrl);
-          setGenerationProgress('');
-
-          // Save to database
-          const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
-          const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
-          const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
-          const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
-          const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
-
+      for (let i = 0; i < imageCount; i++) {
+        setGenerationProgress(`Génération de l'image ${i + 1}/${imageCount}...`);
+        
+        try {
+          const imageUrl = await generateSingleImage();
+          generatedImageUrls.push(imageUrl);
+          
           await supabase.from('image_generations').insert([{
             user_id: null,
             vetements_names: vetementsLabels,
@@ -204,27 +221,47 @@ function GenerationSlugContent({ slug }: { slug: string }) {
             poses_names: posesLabels,
             accessoires_names: accessoiresLabels,
             scenes_names: scenesLabels,
-            image_url: statusData.imageUrl,
-            image_count: 1,
+            image_url: imageUrl,
+            image_count: imageCount,
             description: textareaContent,
             ai_model_id: character.id,
+            image_index: i,
+            batch_id: Date.now().toString(),
           }]);
-          break;
-        } else if (statusData.status === 'failed') {
-          throw new Error('La génération a échoué');
+          
+          setGeneratedImages([...generatedImageUrls]);
+          
+        } catch (err) {
+          if (generatedImageUrls.length === 0) {
+            throw err;
+          } else {
+            console.warn(`Échec pour l'image ${i + 1}, mais ${generatedImageUrls.length} images ont été générées`);
+          }
         }
-        attempts++;
-        setGenerationProgress(`Génération en cours... (${Math.round((attempts / maxAttempts) * 100)}%)`);
       }
 
-      if (attempts >= maxAttempts) {
-        throw new Error('Timeout: la génération a pris trop de temps');
+      setGenerationProgress('');
+      if (generatedImageUrls.length === 0) {
+        throw new Error('Aucune image n\'a pu être générée');
       }
+
     } catch (err) {
       setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleNextImage = () => {
+    setCurrentImageIndex(prev => 
+      prev === generatedImages.length - 1 ? 0 : prev + 1
+    );
+  };
+
+  const handlePrevImage = () => {
+    setCurrentImageIndex(prev => 
+      prev === 0 ? generatedImages.length - 1 : prev - 1
+    );
   };
 
   if (loadingCharacter) {
@@ -253,7 +290,8 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
   const imgSrc = character.avatar_url || '/images/mock.png';
   const imgName = character.name;
-  const hasGeneratedImage = !!generatedImageUrl;
+  const hasGeneratedImages = generatedImages.length > 0;
+  const currentImageUrl = hasGeneratedImages ? generatedImages[currentImageIndex] : null;
 
   return (
     <div className="flex">
@@ -269,7 +307,7 @@ function GenerationSlugContent({ slug }: { slug: string }) {
         {/* Title and mode */}
         <div className="flex items-center gap-22 mb-8">
           <h1 className="text-3xl font-bold font-montserrat">Générateur</h1>
-          {!hasGeneratedImage && (
+          {!hasGeneratedImages && (
             <div className="flex gap-11">
               {['image', 'video'].map((m) => (
                 <button key={m} onClick={() => setMode(m as 'image' | 'video')} className="relative text-sm font-medium group focus:outline-none">
@@ -282,82 +320,134 @@ function GenerationSlugContent({ slug }: { slug: string }) {
         </div>
 
         {/* Main image + textarea + results */}
-        <div className={`flex gap-6 ${hasGeneratedImage ? 'mb-4 items-start' : 'mb-10'}`}>
-          {imgSrc && (
-            <div className="rounded-3xl overflow-hidden relative w-1/3">
-              <Image src={imgSrc} alt={imgName || ''} width={400} height={400} className="object-cover rounded-3xl" />
-              <div className="absolute bottom-0 left-0 w-full h-20 flex items-end justify-start p-4" style={{ background: 'linear-gradient(180.83deg, rgba(0, 0, 0, 0.087) -8.53%, rgba(0, 0, 0, 0.58) 99.29%)' }}>
-                <span className="text-white text-3xl font-bold font-montserrat">{imgName || 'Personnage'}</span>
-              </div>
+        <div className={`flex gap-6 ${hasGeneratedImages ? 'mb-4 items-start' : 'mb-10'}`}>
+          {/* Image du personnage à gauche (toujours visible) */}
+          <div className="rounded-3xl overflow-hidden relative w-1/3">
+            <Image src={imgSrc} alt={imgName || ''} width={400} height={400} className="object-cover rounded-3xl" />
+            <div className="absolute bottom-0 left-0 w-full h-20 flex items-end justify-start p-4" style={{ background: 'linear-gradient(180.83deg, rgba(0, 0, 0, 0.087) -8.53%, rgba(0, 0, 0, 0.58) 99.29%)' }}>
+              <span className="text-white text-3xl font-bold font-montserrat">{imgName || 'Personnage'}</span>
             </div>
-          )}
+          </div>
 
-          {/* Textarea */}
-          <div className={`relative flex flex-col ${hasGeneratedImage ? 'w-1/3' : 'w-2/3'}`}>
+          {/* Textarea et résultats */}
+          <div className={`relative flex flex-col ${hasGeneratedImages ? 'w-1/3' : 'w-2/3'}`}>
             <textarea
               value={textareaContent}
               onChange={(e) => setTextareaContent(e.target.value)}
               placeholder="Décrivez la scène souhaitée..."
-              className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${hasGeneratedImage ? 'w-full h-[317px]' : 'w-160 h-[311px]'}`}
+              className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${hasGeneratedImages ? 'w-full h-[317px]' : 'w-160 h-[311px]'}`}
               disabled={isGenerating}
             />
             <div className="absolute top-6 left-6 pointer-events-none">
               <Image src="/icons/edit.png" alt="Icône" width={29} height={28} style={{ filter: 'brightness(0) saturate(100%) invert(58%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(100%) contrast(88%)' }} />
             </div>
+            
             {generationProgress && (
               <div className="mt-4 flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-red-600"></div>
                 <span className="text-gray-400">{generationProgress}</span>
               </div>
             )}
+            
             {generationError && (
               <div className="mt-4 p-3 bg-red-600/20 border border-red-600 rounded-xl text-red-400 text-sm">{generationError}</div>
             )}
           </div>
 
-          {hasGeneratedImage && generatedImageUrl && (
+          {/* Zone d'affichage des images générées */}
+          {hasGeneratedImages && currentImageUrl && (
             <div className="w-1/3 flex flex-col items-start">
-              <h3 className="text-white text-xl font-bold mb-2">Images Générées</h3>
-              <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-3xl overflow-hidden relative block cursor-pointer" style={{ width: 240, height: 290 }}>
-                <Image src={generatedImageUrl} alt="Image générée" fill className="object-cover rounded-3xl" />
-              </a>
-              <p className="text-gray-400 text-sm mt-2">Cliquez pour ouvrir en grand</p>
+              <h3 className="text-white text-xl font-bold mb-2">
+                Images Générées ({generatedImages.length})
+              </h3>
+              
+              <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
+                <Image 
+                  src={currentImageUrl} 
+                  alt={`Image générée ${currentImageIndex + 1}`} 
+                  fill 
+                  className="object-cover rounded-3xl" 
+                />
+                
+                {/* Navigation entre images si plus d'une */}
+                {generatedImages.length > 1 && (
+                  <>
+                    <div className="absolute inset-0 flex items-center justify-between p-4">
+                      <button 
+                        onClick={handlePrevImage}
+                        className="rounded-full p-2 hover: transition-colors z-20"
+                      >
+                        <Image src="/icons/back_arrow_ios.png" alt="Précédent" width={24} height={24} />
+                      </button>
+                      <button 
+                        onClick={handleNextImage}
+                        className="rounded-full p-2 hover: transition-colors z-20"
+                      > 
+                        <Image src="/icons/arrow-right.png" alt="Suivant" width={33} height={33} />
+                      </button>
+                    </div> 
+                    
+                    {/* Indicateur de position */}
+                    <div className="absolute bottom-4 right-4 bg-black/50 rounded-full px-3 py-1 z-20">
+                      <span className="text-white text-sm">
+                        {currentImageIndex + 1}/{generatedImages.length}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              {/* Miniatures */}
+             
+          
+              
+              <p className="text-gray-400 text-sm mt-2">Cliquez pour télécharger ou partager</p>
             </div>
           )}
         </div>
 
-        {/* Category links */}
-        <div className="flex items-center justify-between mb-10">
-          <h2 className="text-white font-bold text-3xl">Actions</h2>
-          <div className="flex gap-11 mr-84">
-            {topLinks.map((link) => (
-              <button key={link} onClick={() => setActiveCategory(link)} className={`relative text-sm font-medium ${activeCategory === link ? 'text-white' : 'text-gray-400 hover:text-white'}`}>
-                {link}
-                <span className={`absolute left-0 -bottom-1 h-[2px] transition-all duration-300 ${activeCategory === link ? 'w-full bg-red-600' : 'w-0 group-hover:w-full bg-gray-600'}`}></span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Category links (masqué après génération) */}
+        {!hasGeneratedImages && (
+          <>
+            <div className="flex items-center justify-between mb-10">
+              <h2 className="text-white font-bold text-3xl">Actions</h2>
+              <div className="flex gap-11 mr-84">
+                {topLinks.map((link) => (
+                  <button key={link} onClick={() => setActiveCategory(link)} className={`relative text-sm font-medium ${activeCategory === link ? 'text-white' : 'text-gray-400 hover:text-white'}`}>
+                    {link}
+                    <span className={`absolute left-0 -bottom-1 h-[2px] transition-all duration-300 ${activeCategory === link ? 'w-full bg-red-600' : 'w-0 group-hover:w-full bg-gray-600'}`}></span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Category components */}
-        <div>
-          {activeCategory === 'Vetements' && <Vetements selectedIds={selectedVetements} toggleSelect={(id) => toggleSelect(setSelectedVetements, selectedVetements, id)} />}
-          {activeCategory === 'Actions' && <Actions selectedIds={selectedActions} toggleSelect={(id) => toggleSelect(setSelectedActions, selectedActions, id)} />}
-          {activeCategory === 'Poses' && <Poses selectedIds={selectedPoses} toggleSelect={(id) => toggleSelect(setSelectedPoses, selectedPoses, id)} />}
-          {activeCategory === 'Accessoires' && <Accessoires selectedIds={selectedAccessoires} toggleSelect={(id) => toggleSelect(setSelectedAccessoires, selectedAccessoires, id)} />}
-          {activeCategory === 'Scenes' && <Scenes selectedIds={selectedScenes} toggleSelect={(id) => toggleSelect(setSelectedScenes, selectedScenes, id)} />}
-        </div>
+            {/* Category components */}
+            <div>
+              {activeCategory === 'Vetements' && <Vetements selectedIds={selectedVetements} toggleSelect={(id) => toggleSelect(setSelectedVetements, selectedVetements, id)} />}
+              {activeCategory === 'Actions' && <Actions selectedIds={selectedActions} toggleSelect={(id) => toggleSelect(setSelectedActions, selectedActions, id)} />}
+              {activeCategory === 'Poses' && <Poses selectedIds={selectedPoses} toggleSelect={(id) => toggleSelect(setSelectedPoses, selectedPoses, id)} />}
+              {activeCategory === 'Accessoires' && <Accessoires selectedIds={selectedAccessoires} toggleSelect={(id) => toggleSelect(setSelectedAccessoires, selectedAccessoires, id)} />}
+              {activeCategory === 'Scenes' && <Scenes selectedIds={selectedScenes} toggleSelect={(id) => toggleSelect(setSelectedScenes, selectedScenes, id)} />}
+            </div>
+          </>
+        )}
 
         {/* Number of images (only for image mode) */}
-        {mode === 'image' && (
+        {mode === 'image' && !hasGeneratedImages && (
           <>
             <h2 className="text-white font-bold text-2xl mb-6">Nombre d&apos;images</h2>
             <div className="flex gap-4 mb-8">
-              {smallCards.map((card, index) => (
-                <div key={card.id} className={`flex items-center gap-2 w-[82px] h-[43px] rounded-xl p-2 justify-center ${index === 0 ? 'bg-red-600' : 'bg-[rgba(87,87,87,1)]'}`}>
+              {smallCards.map((card) => (
+                <button
+                  key={card.id}
+                  onClick={() => setImageCount(card.value)}
+                  className={`flex items-center gap-2 w-[82px] h-[43px] rounded-xl p-2 justify-center transition-colors ${
+                    imageCount === card.value ? 'bg-red-600' : 'bg-[rgba(87,87,87,1)] hover:bg-gray-600'
+                  }`}
+                >
                   <Image src={card.icon} alt="icon" width={17} height={11} />
                   <span className="text-white font-bold">{card.value}</span>
-                </div>
+                </button>
               ))}
             </div>
           </>
@@ -365,13 +455,33 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
         {/* Generate button */}
         <div className="flex justify-center mb-10">
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className={`px-8 py-3 rounded-xl font-bold text-lg transition ${isGenerating ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
-          >
-            {isGenerating ? 'Génération en cours...' : `Générer ${mode === 'video' ? 'une Vidéo' : 'une Image'}`}
-          </button>
+          {hasGeneratedImages ? (
+            <div className="flex gap-4">
+              <button 
+                onClick={() => {
+                  setGeneratedImages([]);
+                  setCurrentImageIndex(0);
+                }}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                Générer de nouvelles images
+              </button>
+              {/* <button 
+                onClick={() => handleGenerate()}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                Générer à nouveau
+              </button> */}
+            </div>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className={`px-8 py-3 rounded-xl font-bold text-lg transition ${isGenerating ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            >
+              {isGenerating ? 'Génération en cours...' : `Générer ${imageCount} Image${imageCount > 1 ? 's' : ''}`}
+            </button>
+          )}
         </div>
       </div>
     </div>
