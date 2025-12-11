@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
@@ -30,7 +30,6 @@ async function generateCharacterImage(params: {
   chestSize: string;
   personality?: string[];
 }): Promise<{ imageUrl: string; promptId: string }> {
-  // Start the generation
   const startResponse = await fetch('/api/aliveai/generate-character', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -44,8 +43,6 @@ async function generateCharacterImage(params: {
   }
 
   const promptId = startData.promptId;
-
-  // Poll for completion (max 5 minutes with 3 second intervals)
   const maxAttempts = 100;
   const pollInterval = 3000;
 
@@ -110,7 +107,6 @@ const Sidebar = () => (
   </div>
 );
 
-
 interface SelectionGroupProps {
   title: string;
   onOpenModal: () => void;
@@ -118,7 +114,6 @@ interface SelectionGroupProps {
 }
 
 const SelectionGroup: React.FC<SelectionGroupProps> = ({ title, onOpenModal, currentSelection }) => {
-
   const displayValue = Array.isArray(currentSelection)
     ? (currentSelection.length > 0 ? currentSelection.join(', ') : 'Cliquer pour modifier')
     : (currentSelection || 'Cliquer pour modifier');
@@ -128,7 +123,6 @@ const SelectionGroup: React.FC<SelectionGroupProps> = ({ title, onOpenModal, cur
     : 'text-gray-400';
 
   const internalTitle = title.toUpperCase().includes('PENCHANTS SEXUELS') ? 'QUELS SONT SES PENCHANTS SEXUELS' : title.toUpperCase().replace('LA ', 'CHOISIR LA ').replace('LE ', 'CHOISIR LE ');
-
 
   return (
     <div className="w-full relative mb-6">
@@ -156,9 +150,10 @@ interface SelectionModalProps {
   onSelect: (value: string) => void;
   onClose: () => void;
   isMultiSelect: boolean;
+  modalType?: string;
 }
 
-const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = ({
+const SelectionModal: React.FC<SelectionModalProps> = ({
   title: _title,
   options,
   selected,
@@ -167,7 +162,6 @@ const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = (
   isMultiSelect: _isMultiSelect,
   modalType
 }) => {
-
   const isSelected = (opt: string) =>
     Array.isArray(selected) ? selected.includes(opt) : selected === opt;
 
@@ -190,7 +184,6 @@ const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = (
     "Inconnue": "/images/relation10.png",
   };
 
-   // --- VOICE MODAL IMAGES (ASSURE-TOI D'AVOIR CES FICHIERS) ---
   const voiceImages: Record<string, string> = {
     "Voix 1": "/images/voix.jpg",
     "Voix 2": "/images/voix.jpg",
@@ -202,7 +195,6 @@ const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = (
     "Voix 8": "/images/voix.jpg",
     "Voix 9": "/images/voix.jpg",
   };
-
 
   return (
     <div
@@ -222,35 +214,36 @@ const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = (
       <h3 className="text-2xl font-bold mb-10 text-center text-white drop-shadow-xl">
         {modalType === 'relationship' ? 'Modifier le type de relation' :
          modalType === 'profession' ? 'Modifier la profession' :
+         modalType === 'sexualPrefs' ? 'Modifier les penchants sexuels' :
+         modalType === 'voice' ? 'Modifier la voix' :
          'Modifier la personnalité'}
       </h3>
 
       <div
-  className={`grid ${
-    modalType === "personality"
-      ? "justify-start"
-      : "justify-center"
-  }`}
-  style={{
-    gap:
-      modalType === "personality"
-        ? "33px"
-        : modalType === "voice"
-        ? "18px"
-        : "10px",
-
-  
-   gridTemplateColumns:
-  modalType === 'voice'
-    ? "repeat(5, 150px)" // 🔥 5 cartes VOIX première ligne
-        : modalType === "relationship"
-        ? "repeat(5, min-content)"
-        : modalType === "profession"
-        ? "repeat(5, min-content)"
-        : "repeat(4, min-content)",
-  }}
->
-
+        className={`grid ${
+          modalType === "personality"
+            ? "justify-start"
+            : "justify-center"
+        }`}
+        style={{
+          gap:
+            modalType === "personality"
+              ? "33px"
+              : modalType === "voice"
+              ? "18px"
+              : "10px",
+          gridTemplateColumns:
+            modalType === 'voice'
+              ? "repeat(5, 150px)"
+              : modalType === "relationship"
+              ? "repeat(5, min-content)"
+              : modalType === "profession"
+              ? "repeat(5, min-content)"
+              : modalType === "sexualPrefs"
+              ? "repeat(5, min-content)"
+              : "repeat(4, min-content)",
+        }}
+      >
         {options.map((opt, index) => {
           const isOptSelected = isSelected(opt);
           const selectedStyle = isOptSelected
@@ -294,80 +287,112 @@ const SelectionModal: React.FC<SelectionModalProps & { modalType?: string }> = (
               </button>
             );
           }
-// --- VOICE MODAL ---
-if (modalType === "voice") {
 
-  const voiceNames: Record<string, string> = {
-    "Voix 1": "Assurée",
-    "Voix 2": "Enjouée",
-    "Voix 3": "Dominatrice",
-    "Voix 4": "Innocente",
-    "Voix 5": "Douce",
-    "Voix 6": "Sensuelle",
-    "Voix 7": "Calme",
-    "Voix 8": "Réfléchie",
-    "Voix 9": "Fantaisiste",
-  };
+          // --- VOICE MODAL ---
+          if (modalType === "voice") {
+            const voiceNames: Record<string, string> = {
+              "Voix 1": "Assurée",
+              "Voix 2": "Enjouée",
+              "Voix 3": "Dominatrice",
+              "Voix 4": "Innocente",
+              "Voix 5": "Douce",
+              "Voix 6": "Sensuelle",
+              "Voix 7": "Calme",
+              "Voix 8": "Réfléchie",
+              "Voix 9": "Fantaisiste",
+            };
 
-  const isSecondLine = index >= 5; // ✔ VOIX 6 → 9
+            const isSecondLine = index >= 5;
 
-  return (
-    <button
-      key={opt}
-      onClick={() => onSelect(opt)}
-      className={`relative flex flex-col items-center justify-end rounded-3xl overflow-hidden transition-all shadow-lg
-        ${isOptSelected ? "shadow-[0_0_20px_rgba(255,0,0,0.7)]" : ""}`}
-      style={{
-        width: "150px",
-        height: "180px",
-        paddingBottom: "15px",
-        background: "rgba(22,22,22,1)",
-        marginLeft: isSecondLine ? "88px" : "0px", // 🔥 Décalage pour centrer la ligne du bas
-      }}
-    >
-      <div className="absolute top-9 w-15 h-15 rounded-full overflow-hidden border-white z-20 bg-white">
-  {/* IMAGE PRINCIPALE */}
-  <Image
-    src={voiceImages[opt]}
-    alt={opt}
-    fill
-    className="object-cover"
-  />
+            return (
+              <button
+                key={opt}
+                onClick={() => onSelect(opt)}
+                className={`relative flex flex-col items-center justify-end rounded-3xl overflow-hidden transition-all shadow-lg
+                  ${isOptSelected ? "shadow-[0_0_20px_rgba(255,0,0,0.7)]" : ""}`}
+                style={{
+                  width: "150px",
+                  height: "180px",
+                  paddingBottom: "15px",
+                  background: "rgba(22,22,22,1)",
+                  marginLeft: isSecondLine ? "88px" : "0px",
+                }}
+              >
+                <div className="absolute top-9 w-15 h-15 rounded-full overflow-hidden border-white z-20 bg-white">
+                  <Image
+                    src={voiceImages[opt]}
+                    alt={opt}
+                    fill
+                    className="object-cover"
+                  />
+                  <div className="absolute top-1/2 left-1/2 w-5 h-5 -translate-x-1/2 -translate-y-1/2 z-30">
+                    <Image
+                      src="/icons/play.png"
+                      alt="icon"
+                      fill
+                      className="object-contain"
+                    />
+                  </div>
+                </div>
 
-  {/* PETITE ICONE SUPERPOSÉE */}
-  <div className="absolute top-1/2 left-1/2 w-5 h-5 -translate-x-1/2 -translate-y-1/2 z-30">
-    <Image
-      src="/icons/play.png" // remplace par ton icône
-      alt="icon"
-      fill
-      className="object-contain"
-    />
-  </div>
-</div>
+                <span className="mt-24 text-white text-lg font-semibold z-20">
+                  {opt}
+                </span>
 
-      <span className="mt-24 text-white text-lg font-semibold z-20">
-        {opt}
-      </span>
+                <span className="text-gray-300 font-medium z-20 mt-1">
+                  {voiceNames[opt]}
+                </span>
 
-      <span className="text-gray-300  font-medium z-20 mt-1">
-        {voiceNames[opt]}
-      </span>
+                {isOptSelected && (
+                  <div className="absolute top-2 right-2 w-7 h-7 z-30">
+                    <Image src="/icons/check.png" alt="selected" fill className="object-contain" />
+                  </div>
+                )}
+              </button>
+            );
+          }
 
-      {isOptSelected && (
-        <div className="absolute top-2 right-2 w-7 h-7 z-30">
-          <Image src="/icons/check.png" alt="selected" fill className="object-contain" />
-        </div>
-      )}
-    </button>
-  );
-}
+          // --- PROFESSION MODAL ---
+          if (modalType === 'profession') {
+            return (
+              <button
+                key={opt}
+                onClick={() => onSelect(opt)}
+                className={`font-semibold transition-all shadow-lg text-white whitespace-nowrap ${selectedStyle}`}
+                style={{
+                  ...baseButtonStyle,
+                  paddingLeft: "20px",
+                  paddingRight: "20px",
+                  background: isOptSelected ? "" : "rgba(114,114,114,1)",
+                }}
+              >
+                {opt}
+              </button>
+            );
+          }
 
+          // --- SEXUAL PREFS MODAL ---
+          if (modalType === 'sexualPrefs') {
+            return (
+              <button
+                key={opt}
+                onClick={() => onSelect(opt)}
+                className={`font-semibold transition-all shadow-lg text-white whitespace-nowrap ${selectedStyle}`}
+                style={{
+                  ...baseButtonStyle,
+                  paddingLeft: "20px",
+                  paddingRight: "20px",
+                  background: isOptSelected ? "" : "rgba(114,114,114,1)",
+                }}
+              >
+                {opt}
+              </button>
+            );
+          }
 
-          
-          // --- PERSONALITY MODAL ---
+          // --- PERSONALITY MODAL (par défaut) ---
           const isSecondLinePersonality = index >= 4 && index < 8;
           const horizontalPadding = isSecondLinePersonality ? "28px" : "0px";
-          // const transformScaleX = isSecondLinePersonality ? "scale(1.2,1)" : "scale(1,1)";
 
           return (
             <button
@@ -378,7 +403,6 @@ if (modalType === "voice") {
                 ...baseButtonStyle,
                 paddingLeft: horizontalPadding,
                 paddingRight: horizontalPadding,
-                // transform: transformScaleX,
                 background: isOptSelected ? "" : "rgba(114,114,114,1)",
               }}
             >
@@ -391,36 +415,55 @@ if (modalType === "voice") {
   );
 };
 
-
-
-
-
 // --- PAGE PRINCIPALE (Avec logique et soumission) ---
 export default function FinalPage() {
   const router = useRouter();
-  const { modelData, saveStep } = useModelStore();
+  const { modelData, saveStep, clearModelData } = useModelStore();
 
   const {
-    gender = 'femmes', ethnicities = [], age = '', hairType = '', hairColor = '', eyeColor = '',
-    bodyType = '', chestSize = '', name: storedName = '',
-    personality: storedPersonality = [], relationship: storedRelationship = [],
-    profession: storedProfession = [], sexualPreferences: storedSexualPreferences = [],
+    gender = 'femmes', 
+    ethnicities = [], 
+    age = '', 
+    hairType = '', 
+    hairColor = '', 
+    eyeColor = '',
+    bodyType = '', 
+    chestSize = '', 
+    name: storedName = '',
+    personality: storedPersonality = [], 
+    relationship: storedRelationship = [],
+    profession: storedProfession = [], 
+    sexualPreferences: storedSexualPreferences = [],
     voice: storedVoice = null,
   } = modelData;
 
-  // Assurez-vous que les tableaux sont toujours initialisés comme des tableaux, même si les données du store sont des chaînes (pour la résilience)
+  // Fonction pour obtenir un tableau à partir des données du store
   const getArrayFromStore = (data: string | string[] | undefined): string[] => {
     if (Array.isArray(data)) return data;
     if (typeof data === 'string' && data) return [data];
     return [];
   };
 
+  // États locaux synchronisés avec le store
   const [name, setName] = useState(storedName || 'Elizabeth Garcia');
   const [personality, setPersonality] = useState<string[]>(getArrayFromStore(storedPersonality));
   const [relationship, setRelationship] = useState<string[]>(getArrayFromStore(storedRelationship));
   const [profession, setProfession] = useState<string[]>(getArrayFromStore(storedProfession));
   const [sexualPreferences, setSexualPreferences] = useState<string[]>(getArrayFromStore(storedSexualPreferences));
   const [voice, setVoice] = useState<string | null>(storedVoice);
+
+  // --- Synchronisation automatique avec le store ---
+  useEffect(() => {
+    // Mettre à jour le store chaque fois que les données locales changent
+    saveStep({
+      name,
+      personality,
+      relationship,
+      profession,
+      sexualPreferences,
+      voice
+    });
+  }, [name, personality, relationship, profession, sexualPreferences, voice, saveStep]);
 
   // --- ALIVEAI GENERATION STATE ---
   const [isGenerating, setIsGenerating] = useState(false);
@@ -441,11 +484,10 @@ export default function FinalPage() {
     setModalType(null);
   };
 
-  // Listes d'options harmonisées (utilisant les données de votre dernier code sans front)
+  // Listes d'options harmonisées
   const personalitiesOptions = ['Nympho', 'Amant', 'Soumise', 'Dominatrice', 'Tentatrice', 'Innocente', 'Soignante', 'Expérimentatrice', 'Méchante', 'Confidente', 'Timide', 'Reine'];
   const relationshipsOptions = ['Petit Amis', 'Plan Cul', 'Camarade', 'Collègue', 'Épouse', 'Maîtresse', 'Amis', 'Sugarbaby', 'Étudiante', 'Inconnue'];
   const professionsOptions = ['Strip-teaseuse', 'Mannequin', 'Étudiante', 'Danseuse', 'Femme de chambre', 'Cam Girl', 'Pornstar', 'Barman', 'Streamer', 'Coach Sportif', 'Secrétaire', 'Hôtesse de l\'air', 'Médecin'];
-  // J'ai corrigé les fautes de frappe visibles dans votre liste précédente
   const sexualPrefsOptions = ['Bondage', 'Fessée', 'Collier et Laisse', 'Dirty Talk', 'Punition', 'Jeu Anal', 'Jeu Oral', 'Cum Play', 'Creampie', 'Daddy Dominance', 'Éjaculation féminine', 'Edging', 'Obéissance', 'Contrôle', 'Inexpérience', 'Lent et Sensuel', 'Flirte', 'Jeu de séduction érotique', 'Câlin'];
   const voicesOptions = ['Voix 1', 'Voix 2', 'Voix 3', 'Voix 4', 'Voix 5', 'Voix 6', 'Voix 7', 'Voix 8', 'Voix 9'];
 
@@ -466,11 +508,41 @@ export default function FinalPage() {
   };
 
   const optionsMap: Record<string, MultiSelectConfig | SingleSelectConfig> = {
-    personality: { title: 'la Personnalité', options: personalitiesOptions, state: personality, setState: setPersonality, isMulti: true },
-    relationship: { title: 'le Type de Relation', options: relationshipsOptions, state: relationship, setState: setRelationship, isMulti: true },
-    profession: { title: 'la Profession', options: professionsOptions, state: profession, setState: setProfession, isMulti: true },
-    sexualPrefs: { title: 'les Penchants Sexuels', options: sexualPrefsOptions, state: sexualPreferences, setState: setSexualPreferences, isMulti: true },
-    voice: { title: 'la Voix', options: voicesOptions, state: voice, setState: setVoice, isMulti: false },
+    personality: { 
+      title: 'la Personnalité', 
+      options: personalitiesOptions, 
+      state: personality, 
+      setState: setPersonality, 
+      isMulti: true 
+    },
+    relationship: { 
+      title: 'le Type de Relation', 
+      options: relationshipsOptions, 
+      state: relationship, 
+      setState: setRelationship, 
+      isMulti: true 
+    },
+    profession: { 
+      title: 'la Profession', 
+      options: professionsOptions, 
+      state: profession, 
+      setState: setProfession, 
+      isMulti: true 
+    },
+    sexualPrefs: { 
+      title: 'les Penchants Sexuels', 
+      options: sexualPrefsOptions, 
+      state: sexualPreferences, 
+      setState: setSexualPreferences, 
+      isMulti: true 
+    },
+    voice: { 
+      title: 'la Voix', 
+      options: voicesOptions, 
+      state: voice, 
+      setState: setVoice, 
+      isMulti: false 
+    },
   };
 
   const handleModalSelect = (value: string, config: MultiSelectConfig | SingleSelectConfig) => {
@@ -487,10 +559,20 @@ export default function FinalPage() {
     }
   };
 
-  // Condition de validation pour tous les champs, y compris ceux des étapes précédentes
-  const isFormValid = name && personality.length > 0 && relationship.length > 0 && profession.length > 0 && sexualPreferences.length > 0 && voice &&
-    ethnicities.length > 0 && age && hairType && hairColor && eyeColor && bodyType && chestSize;
-
+  // Condition de validation pour tous les champs
+  const isFormValid = name && 
+    personality.length > 0 && 
+    relationship.length > 0 && 
+    profession.length > 0 && 
+    sexualPreferences.length > 0 && 
+    voice &&
+    ethnicities.length > 0 && 
+    age && 
+    hairType && 
+    hairColor && 
+    eyeColor && 
+    bodyType && 
+    chestSize;
 
   const handleSubmit = async () => {
     if (!isFormValid) {
@@ -510,6 +592,9 @@ export default function FinalPage() {
     const hairTypeString = Array.isArray(hairType) ? hairType.join(', ') : hairType;
     const hairColorString = Array.isArray(hairColor) ? hairColor.join(', ') : hairColor;
     const personalityString = Array.isArray(personality) ? personality.join(', ') : personality;
+    const relationshipString = Array.isArray(relationship) ? relationship.join(', ') : relationship;
+    const professionString = Array.isArray(profession) ? profession.join(', ') : profession;
+    const sexualPreferencesString = Array.isArray(sexualPreferences) ? sexualPreferences.join(', ') : sexualPreferences;
 
     // Start AliveAI image generation
     setIsGenerating(true);
@@ -550,7 +635,7 @@ export default function FinalPage() {
       setGenerationProgress('Utilisation d\'un avatar par défaut...');
     }
 
-    const systemPrompt = `Tu es ${name}, une ${gender === 'femmes' ? 'femme' : 'homme'} de ${age} ans d'origine ${Array.isArray(ethnicities) ? ethnicities.join(' et ') : ethnicities}. Tu as les cheveux ${hairTypeString} de couleur ${hairColorString} et des yeux ${eyeColor}. Ta personnalité est ${personalityString}. Tu travailles comme ${Array.isArray(profession) ? profession.join(', ') : profession}. Tu es ${Array.isArray(relationship) ? relationship.join(', ') : relationship}. Tu parles avec une voix ${voice || 'naturelle'}.`;
+    const systemPrompt = `Tu es ${name}, une ${gender === 'femmes' ? 'femme' : 'homme'} de ${age} ans d'origine ${Array.isArray(ethnicities) ? ethnicities.join(' et ') : ethnicities}. Tu as les cheveux ${hairTypeString} de couleur ${hairColorString} et des yeux ${eyeColor}. Ta personnalité est ${personalityString}. Tu travailles comme ${professionString}. Tu es ${relationshipString}. Tu parles avec une voix ${voice || 'naturelle'}.`;
 
     const aiModelData = {
       name: name.trim(),
@@ -567,13 +652,15 @@ export default function FinalPage() {
       eye_color: eyeColor,
       body_type: bodyTypeString,
       chest_size: chestSizeString,
-      relationship,
-      profession,
-      sexual_preferences: sexualPreferences,
+      relationship: relationshipString,
+      profession: professionString,
+      sexual_preferences: sexualPreferencesString,
       voice,
       created_by: user.id,
       status: 'active',
       is_public: false,
+      is_alive: true,
+      generated_image_url: avatarUrl,
     };
 
     setGenerationProgress('Enregistrement du modèle...');
@@ -590,8 +677,11 @@ export default function FinalPage() {
       console.error('Erreur Supabase:', error);
       alert(`Erreur lors de l'enregistrement: ${error.message}`);
     } else {
-      saveStep({ createdModelId: data.id });
-      router.push('/creer-modele/final');
+      // Effacer les données du store après création réussie
+      clearModelData();
+      alert('Modèle créé avec succès ! Votre IA est maintenant vivante.');
+      router.push('/creer-modele/summary'); 
+      // router.push('/creer-modele');
     }
   };
 
@@ -603,7 +693,6 @@ export default function FinalPage() {
       <Sidebar />
 
       <div className="flex-1 ml-77 p-8 text-white bg-black min-h-screen">
-
         <div className="max-w-4xl mx-auto flex flex-col items-center">
 
           {/* Icone utilisateur */}
@@ -615,15 +704,14 @@ export default function FinalPage() {
 
           <h1 className="text-3xl font-bold mb-10 text-center w-full">Choisir un nom</h1>
 
-          {/* Champ Nom AVEC DÉGRADÉ */}
+          {/* Champ Nom */}
           <div className="w-full max-w-xl mb-12">
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               style={INPUT_GRADIENT_STYLE}
-              className="w-full p-4 rounded-xl text-white border border-gray-700 text-lg font-bold 
-               text-left placeholder-gray-400"
+              className="w-full p-4 rounded-xl text-white border border-gray-700 text-lg font-bold text-left placeholder-gray-400"
               placeholder="Entrer un nom (max 20 caractères)"
               maxLength={20}
             />
@@ -632,13 +720,11 @@ export default function FinalPage() {
             </div>
           </div>
 
-
           <h2 className="text-2xl font-bold mb-6 text-center w-full">Choisir la personnalité</h2>
           <p className="text-gray-400 mb-10 text-center">Cliquez pour modifier</p>
 
-          {/* GRILLE DE SÉLECTION (Déclenche le modal) */}
+          {/* GRILLE DE SÉLECTION */}
           <div className="grid grid-cols-2 gap-8 w-full max-w-3xl">
-
             <SelectionGroup
               title="LA PERSONNALITÉ"
               currentSelection={personality}
@@ -668,14 +754,11 @@ export default function FinalPage() {
               currentSelection={voice}
               onOpenModal={() => openModal('voice')}
             />
-            {/* Ajout d'une boîte vide pour l'alignement */}
-            <div></div>
-
+            <div></div> {/* Espace vide pour l'alignement */}
           </div>
 
-          {/* BOUTON TERMINER (Centré) */}
+          {/* BOUTON TERMINER */}
           <div className="mt-16 pb-10 flex flex-col items-center">
-            {/* Generation Progress */}
             {isGenerating && (
               <div className="mb-6 text-center">
                 <div className="flex items-center justify-center mb-3">
@@ -685,7 +768,6 @@ export default function FinalPage() {
               </div>
             )}
 
-            {/* Generation Error */}
             {generationError && !isGenerating && (
               <div className="mb-4 p-3 bg-yellow-900/50 border border-yellow-600 rounded-lg text-yellow-200 text-sm text-center max-w-md">
                 <p>⚠️ {generationError}</p>
@@ -702,11 +784,10 @@ export default function FinalPage() {
               {isGenerating ? 'Génération en cours...' : 'Terminer et enregistrer'}
             </button>
           </div>
-
         </div>
       </div>
 
-      {/* --- AFFICHAGE CONDITIONNEL DU MODAL --- */}
+      {/* MODAL */}
       {isModalOpen && currentConfig && (
         <SelectionModal
           modalType={modalType ?? undefined}
@@ -718,7 +799,6 @@ export default function FinalPage() {
           onSelect={(value) => handleModalSelect(value, currentConfig)}
         />
       )}
-
     </div>
   );
 }
