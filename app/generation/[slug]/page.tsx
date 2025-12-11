@@ -639,39 +639,43 @@ const handleGenerateVideo = async () => {
           </>
         )}
 
-        {/* Zone d'affichage de la vidéo générée */}
-        {generatedVideoUrl && (
-          <div className="flex flex-col items-center mb-10">
-            <h3 className="text-white text-xl font-bold mb-4">Vidéo Générée</h3>
-            <div className="rounded-3xl overflow-hidden relative" style={{ maxWidth: 500 }}>
-              <video
-                src={generatedVideoUrl}
-                controls
-                autoPlay
-                loop
-                className="w-full h-auto rounded-3xl"
-              />
-            </div>
-            <div className="flex gap-4 mt-4">
-              <a
-                href={generatedVideoUrl}
-                download
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center gap-2"
-              >
-                <span>Télécharger</span>
-              </a>
-              <button
-                onClick={() => {
-                  setGeneratedVideoUrl(null);
-                  setGeneratedImages([]);
-                }}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                Nouvelle génération
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Zone d'affichage de la vidéo générée */}
+{generatedVideoUrl && (
+  <div className="flex justify-end -mt-119 mb-10 ">
+    <div className="flex flex-col items-end">
+   <h3 className="text-white text-xl font-bold mb-8 ml-5 self-start">Vidéo Générée</h3>
+
+      <div className="rounded-3xl overflow-hidden relative" style={{ maxWidth: 300 }}>
+        <video
+          src={generatedVideoUrl}
+          controls
+          autoPlay
+          loop
+          className="w-full  ml-4 rounded-3xl"
+        />
+      </div>
+      <div className="flex gap-4 mt-4">
+        <a
+          href={generatedVideoUrl}
+          download
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+        >
+          <span>Télécharger</span>
+        </a>
+        <button
+          onClick={() => {
+            setGeneratedVideoUrl(null);
+            setGeneratedImages([]);
+          }}
+          className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          Nouvelle génération
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
         {/* Generate button */}
         <div className="flex justify-center mb-10">
