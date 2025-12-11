@@ -89,6 +89,10 @@ function GenerationSlugContent({ slug }: { slug: string }) {
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState('Vetements');
 
+  // Video generation states
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
+  const [lastGeneratedMediaId, setLastGeneratedMediaId] = useState<string | null>(null);
+
   const [selectedVetements, setSelectedVetements] = useState<number[]>([]);
   const [selectedActions, setSelectedActions] = useState<number[]>([]);
   const [selectedPoses, setSelectedPoses] = useState<number[]>([]);
@@ -149,23 +153,28 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
   const customPrompt = buildFullPrompt(); // ta fonction qui construit le prompt depuis les choix de l'utilisateur
 
+  // Construire les paramètres du personnage avec ses vraies caractéristiques
+  const characterParams = {
+    name: character.name,
+    gender: character.gender || 'femmes', // Valeurs attendues: 'femmes' ou 'hommes'
+    age: character.age || 25,
+    ethnicities: character.ethnicities?.length ? character.ethnicities : ['Occidental'],
+    hairType: character.hair_type || 'straight',
+    hairColor: character.hair_color || 'brown',
+    eyeColor: character.eye_color || 'brown',
+    bodyType: character.body_type || 'slim',
+    chestSize: character.chest_size || 'medium',
+    personality: character.personality || '',
+    customPrompt: customPrompt,
+  };
+
+  console.log('[Generation] Paramètres du personnage:', characterParams);
+
   // Crée le prompt côté serveur
   const response = await fetch('/api/aliveai/generate-character', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: character.name,
-      gender: character.gender || 'FEMALE',
-      age: character.age || 25,
-      ethnicities: character.ethnicities || ['Occidental'],
-      hairType: character.hair_type || 'straight',
-      hairColor: character.hair_color || 'brown',
-      eyeColor: character.eye_color || 'brown',
-      bodyType: character.body_type || 'slim',
-      chestSize: character.chest_size || 'medium',
-      personality: character.personality,
-      customPrompt: customPrompt,
-    }),
+    body: JSON.stringify(characterParams),
   });
 
   const data = await response.json();
@@ -267,9 +276,153 @@ const handleNextImage = () => {
 };
 
 const handlePrevImage = () => {
-  setCurrentImageIndex(prev => 
+  setCurrentImageIndex(prev =>
     prev === 0 ? generatedImages.length - 1 : prev - 1
   );
+};
+
+// Génération de vidéo (processus en deux étapes : image -> vidéo)
+const handleGenerateVideo = async () => {
+  if (!character) return;
+
+  setIsGenerating(true);
+  setGenerationError(null);
+  setGeneratedVideoUrl(null);
+  setGeneratedImages([]);
+
+  try {
+    const customPrompt = buildFullPrompt();
+
+    // Construire les paramètres du personnage avec ses vraies caractéristiques
+    const characterParams = {
+      name: character.name,
+      gender: character.gender || 'femmes', // Valeurs attendues: 'femmes' ou 'hommes'
+      age: character.age || 25,
+      ethnicities: character.ethnicities?.length ? character.ethnicities : ['Occidental'],
+      hairType: character.hair_type || 'straight',
+      hairColor: character.hair_color || 'brown',
+      eyeColor: character.eye_color || 'brown',
+      bodyType: character.body_type || 'slim',
+      chestSize: character.chest_size || 'medium',
+      personality: character.personality || '',
+      customPrompt: customPrompt,
+    };
+
+    console.log('[Video Generation] Paramètres du personnage:', characterParams);
+
+    // Étape 1: Générer une image d'abord
+    setGenerationProgress('Étape 1/2 : Génération de l\'image source...');
+
+    const imageResponse = await fetch('/api/aliveai/generate-character', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(characterParams),
+    });
+
+    const imageData = await imageResponse.json();
+    if (!imageResponse.ok) throw new Error(imageData.error || 'Erreur de génération d\'image');
+
+    const imagePromptId = imageData.promptId;
+
+    // Polling pour récupérer l'image et son mediaId
+    let imageUrl: string | null = null;
+    let mediaId: string | null = null;
+    let attempts = 0;
+    const maxAttempts = 60;
+
+    while (attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 5000));
+      setGenerationProgress(`Étape 1/2 : Génération de l'image source... (${Math.min(Math.round((attempts / maxAttempts) * 100), 99)}%)`);
+
+      const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${imagePromptId}`);
+      const statusData = await statusRes.json();
+
+      console.log('[Video Gen] Image status:', statusData);
+
+      if ((statusData.isComplete || statusData.status === 'completed') && statusData.imageUrl) {
+        imageUrl = statusData.imageUrl;
+        mediaId = statusData.mediaId;
+        break;
+      } else if (statusData.status === 'failed') {
+        throw new Error('La génération de l\'image source a échoué');
+      }
+
+      attempts++;
+    }
+
+    if (!imageUrl || !mediaId) {
+      throw new Error('Impossible de générer l\'image source pour la vidéo');
+    }
+
+    setLastGeneratedMediaId(mediaId);
+    setGeneratedImages([imageUrl]); // Afficher l'image source
+
+    // Étape 2: Convertir l'image en vidéo
+    setGenerationProgress('Étape 2/2 : Conversion en vidéo...');
+
+    const videoText = customPrompt || 'Animation naturelle, mouvement doux';
+
+    const videoResponse = await fetch('/api/aliveai/generate-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mediaId: mediaId,
+        text: videoText.substring(0, 300), // Max 300 caractères
+        videoLength: 'SHORT',
+        videoFrameRate: 'MEDIUM',
+      }),
+    });
+
+    const videoData = await videoResponse.json();
+    if (!videoResponse.ok) throw new Error(videoData.error || 'Erreur de génération de vidéo');
+
+    const videoPromptId = videoData.promptId;
+
+    // Polling pour récupérer la vidéo
+    let videoAttempts = 0;
+    const maxVideoAttempts = 120; // Vidéos prennent plus de temps
+
+    while (videoAttempts < maxVideoAttempts) {
+      await new Promise(r => setTimeout(r, 5000));
+      setGenerationProgress(`Étape 2/2 : Conversion en vidéo... (${Math.min(Math.round((videoAttempts / maxVideoAttempts) * 100), 99)}%)`);
+
+      const videoStatusRes = await fetch(`/api/aliveai/generate-video?promptId=${videoPromptId}`);
+      const videoStatusData = await videoStatusRes.json();
+
+      console.log('[Video Gen] Video status:', videoStatusData);
+
+      if (videoStatusData.status === 'completed' && videoStatusData.videoUrl) {
+        setGeneratedVideoUrl(videoStatusData.videoUrl);
+        setGenerationProgress('');
+
+        // Enregistrer dans Supabase
+        const { error: saveError } = await supabase.from('video_generations').insert([{
+          user_id: null,
+          video_url: videoStatusData.videoUrl,
+          source_image_url: imageUrl,
+          description: customPrompt,
+          ai_model_id: character.id,
+        }]);
+        if (saveError) console.warn('Erreur sauvegarde vidéo:', saveError);
+
+        setIsGenerating(false);
+        return;
+      } else if (videoStatusData.status === 'failed') {
+        throw new Error(videoStatusData.error || 'La génération de la vidéo a échoué');
+      }
+
+      videoAttempts++;
+    }
+
+    throw new Error('Timeout: la génération de vidéo a pris trop de temps');
+
+  } catch (err) {
+    console.error('[Video Gen] Error:', err);
+    setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
+  } finally {
+    setIsGenerating(false);
+    setGenerationProgress('');
+  }
 };
 
   if (loadingCharacter) {
@@ -363,10 +516,15 @@ const handlePrevImage = () => {
           </div>
 
          {/* Zone d'affichage des images générées */}
-{hasGeneratedImages && currentImageUrl && (
+{hasGeneratedImages && currentImageUrl && !generatedVideoUrl && (
   <div className="w-1/3 flex flex-col items-start">
     <h3 className="text-white text-xl font-bold mb-2">
-      Images Générées ({generatedImages.length})
+      {mode === 'video'
+        ? 'Image Source (en cours de conversion...)'
+        : generatedImages.length === 1
+          ? 'Image Générée'
+          : `Images Générées (${generatedImages.length})`
+      }
     </h3>
 
     <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
@@ -481,33 +639,69 @@ const handlePrevImage = () => {
           </>
         )}
 
+        {/* Zone d'affichage de la vidéo générée */}
+        {generatedVideoUrl && (
+          <div className="flex flex-col items-center mb-10">
+            <h3 className="text-white text-xl font-bold mb-4">Vidéo Générée</h3>
+            <div className="rounded-3xl overflow-hidden relative" style={{ maxWidth: 500 }}>
+              <video
+                src={generatedVideoUrl}
+                controls
+                autoPlay
+                loop
+                className="w-full h-auto rounded-3xl"
+              />
+            </div>
+            <div className="flex gap-4 mt-4">
+              <a
+                href={generatedVideoUrl}
+                download
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <span>Télécharger</span>
+              </a>
+              <button
+                onClick={() => {
+                  setGeneratedVideoUrl(null);
+                  setGeneratedImages([]);
+                }}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                Nouvelle génération
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Generate button */}
         <div className="flex justify-center mb-10">
-          {hasGeneratedImages ? (
-            <div className="flex gap-4">
-              <button 
-                onClick={() => {
-                  setGeneratedImages([]);
-                  setCurrentImageIndex(0);
-                }}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
-              >
-                Générer de nouvelles images
-              </button>
-              {/* <button 
-                onClick={() => handleGenerate()}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition-colors"
-              >
-                Générer à nouveau
-              </button> */}
-            </div>
+          {(hasGeneratedImages || generatedVideoUrl) ? (
+            !generatedVideoUrl && (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setGeneratedImages([]);
+                    setGeneratedVideoUrl(null);
+                    setCurrentImageIndex(0);
+                  }}
+                  className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
+                >
+                  {mode === 'video' ? 'Générer une nouvelle vidéo' : 'Générer de nouvelles images'}
+                </button>
+              </div>
+            )
           ) : (
             <button
-              onClick={handleGenerate}
+              onClick={mode === 'video' ? handleGenerateVideo : handleGenerate}
               disabled={isGenerating}
               className={`px-8 py-3 rounded-xl font-bold text-lg transition ${isGenerating ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
             >
-              {isGenerating ? 'Génération en cours...' : `Générer ${imageCount} Image${imageCount > 1 ? 's' : ''}`}
+              {isGenerating
+                ? 'Génération en cours...'
+                : mode === 'video'
+                  ? 'Générer une vidéo'
+                  : `Générer ${imageCount} Image${imageCount > 1 ? 's' : ''}`
+              }
             </button>
           )}
         </div>
