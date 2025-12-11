@@ -27,6 +27,8 @@ interface AIModelProfile {
   is_alive?: boolean;
   generated_image_url?: string;
   gender?: 'femmes' | 'hommes';
+   systemPrompt?: string;
+  greetings?: string[];
 
 }
 
@@ -290,97 +292,35 @@ export default function SummaryPage() {
   //     setSaving(false);
   //   }
   // };
+// Ex: dans ton composant (assure-toi d'avoir importé `supabase`)
+// import { supabase } from '...';
+const handleGiveLife = () => {
+  // On récupère toutes les données du profil depuis le state
+  const profileData = {
+    name: profile.name,
+    description: profile.description,
+    age: profile.age,
+    gender: profile.gender,
+    ethnicities: profile.ethnicities,
+    hair_type: profile.hair_type,
+    hair_color: profile.hair_color,
+    eye_color: profile.eye_color,
+    body_type: profile.body_type,
+    chest_size: profile.chest_size,
+    personality: profile.personality,
+    relationship: profile.relationship,
+    profession: profile.profession,
+    sexual_preferences: profile.sexual_preferences,
+    voice: profile.voice,
+    systemPrompt: profile.systemPrompt || '',
+    greetings: profile.greetings || [],
+  };
 
-const handleGiveLife = async () => {
-  try {
-    setSaving(true);
+  // Sauvegarder dans localStorage pour la page activate-ai
+  localStorage.setItem('model_profile', JSON.stringify(profileData));
 
-    if (!userData) {
-      alert('Veuillez vous connecter pour donner vie à votre IA');
-      return;
-    }
-
-    // Construire le prompt complet pour AliveAI
-    const appearancePrompt = `A beautiful ${
-      profile.gender?.toLowerCase() === 'hommes' ? 'man' : 'woman'
-    }, ${profile.ethnicities?.[0] || ''}, ${profile.age} years old, ${profile.hair_type} ${profile.hair_color} hair, ${
-      profile.eye_color
-    } eyes, ${profile.body_type} body type, ${profile.chest_size} chest, ${profile.personality} expression, high quality, photorealistic`;
-
-    // Corps de la requête vers ton API
-    const aliveAIRequest = {
-      name: profile.name,
-      appearance: appearancePrompt,
-      detailLevel: 'HIGH',
-      gender: profile.gender?.toUpperCase() === 'HOMMES' ? 'MALE' : 'FEMALE',
-      fromLocation: profile.ethnicities?.[0]?.toUpperCase() || 'ASIA',
-      age: profile.age,
-      ethnicities: profile.ethnicities,
-      hairType: profile.hair_type,
-      hairColor: profile.hair_color,
-      eyeColor: profile.eye_color,
-      bodyType: profile.body_type,
-      chestSize: profile.chest_size,
-      personality: profile.personality,
-      faceImproveEnabled: true,
-      faceModel: 'REALISM',
-      model: 'REALISM',
-      aspectRatio: 'PORTRAIT',
-      blockExplicitContent: false,
-      scene: profile.description || undefined,
-    };
-
-    // 1️⃣ POST → créer le prompt AliveAI
-    const response = await fetch('/api/aliveai/generate-character', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(aliveAIRequest),
-    });
-
-    if (!response.ok) throw new Error('Erreur lors de la création du prompt AliveAI');
-    const data = await response.json();
-    const promptId = data?.promptId;
-    if (!promptId) throw new Error('Aucun promptId reçu d\'AliveAI');
-
-    alert('Génération de l’image en cours... Cela peut prendre quelques minutes.');
-
-    // 2️⃣ Polling pour récupérer l’image
-    let attempts = 0;
-    const maxAttempts = 300; // ~10 minutes
-    const interval = 2000; // 2 secondes
-
-    const pollImage = setInterval(async () => {
-      attempts++;
-      try {
-        const getResponse = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
-        const getData = await getResponse.json();
-
-        if (getData.isComplete && getData.imageUrl) {
-          clearInterval(pollImage);
-          const generatedImageUrl = getData.imageUrl;
-          setAiImageUrl(generatedImageUrl); // Mettre à jour l'état pour afficher l'image
-          alert('Image générée avec succès !');
-
-          // Redirection vers la page Activate AI
-          // router.push('/creer-modele/activate-ai');
-        }
-
-        if (attempts >= maxAttempts) {
-          clearInterval(pollImage);
-          alert('La génération de l’image a pris trop de temps. Veuillez réessayer plus tard.');
-        }
-      } catch (err: any) {
-        clearInterval(pollImage);
-        console.error('Erreur lors du polling AliveAI:', err);
-        alert('Erreur lors de la génération de l’image. Veuillez réessayer.');
-      }
-    }, interval);
-  } catch (error: any) {
-    console.error('Erreur lors de l\'activation:', error);
-    alert(error?.message || 'Erreur lors de l\'activation');
-  } finally {
-    setSaving(false);
-  }
+  // Redirection vers la page d'activation
+  router.push('/creer-modele/activate-ai');
 };
 
 
@@ -606,13 +546,7 @@ const handleGiveLife = async () => {
 
           {/* Boutons d'action */}
           <div className="flex space-x-4 mt-8">
-            {/* <button
-              onClick={handleSave}
-              disabled={saving || isAIAlive}
-              className="w-[200px] py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold rounded-xl text-base transition"
-            >
-              {saving ? 'Sauvegarde...' : 'Sauvegarder'}
-            </button> */}
+          
             
             <button
               onClick={handleGiveLife}
@@ -624,13 +558,7 @@ const handleGiveLife = async () => {
               {isAIAlive ? 'IA Active ✓' : 'Donner vie à mon IA'}
             </button>
             
-            {/* <button
-              onClick={handleResetToDefault}
-              disabled={saving || isNewModel}
-              className="w-[180px] py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white font-bold rounded-xl text-base transition"
-            >
-              Réinitialiser
-            </button> */}
+           
           </div>
         </div>
       </div>
