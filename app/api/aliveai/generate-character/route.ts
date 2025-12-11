@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import {
   createPrompt,
   getPrompt,
+  getPromptQueueStatus,
   mapGender,
   mapEthnicityToLocation,
   buildAppearanceDescription,
@@ -109,8 +110,37 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('AliveAI generate-character error:', error);
+
+    const errorMessage = error instanceof Error ? error.message : 'Erreur serveur';
+
+    // Check for rate limiting errors from AliveAI API
+    if (errorMessage.includes('Max pending creations') ||
+        errorMessage.includes('Too many requests') ||
+        errorMessage.includes('rate limit')) {
+      return NextResponse.json(
+        {
+          error: 'Le service de génération d\'images est temporairement surchargé. Veuillez réessayer dans quelques minutes.',
+          code: 'RATE_LIMITED',
+          retryAfter: 60, // Suggest retry after 60 seconds
+        },
+        { status: 429 }
+      );
+    }
+
+    // Check for authentication errors
+    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      return NextResponse.json(
+        {
+          error: 'Erreur d\'authentification avec le service de génération d\'images.',
+          code: 'AUTH_ERROR',
+        },
+        { status: 503 }
+      );
+    }
+
+    // Generic server error
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
@@ -118,7 +148,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/aliveai/generate-character?promptId=xxx
- * 
+ *
  * Check the status of a character generation prompt.
  * Returns the generated image URL when complete.
  */
@@ -127,7 +157,7 @@ export async function GET(request: NextRequest) {
     // Authenticate user
     const supabase = await createSupabaseServerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
@@ -144,7 +174,47 @@ export async function GET(request: NextRequest) {
     }
 
     // Get prompt status from AliveAI
-    const result = await getPrompt(promptId);
+    let result;
+    try {
+      result = await getPrompt(promptId);
+    } catch (apiError) {
+      // Log but don't fail - treat as "still processing" for transient errors
+      console.warn('[AliveAI] Error fetching prompt status:', apiError);
+      const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
+
+      // Check if it's a permanent error (e.g., prompt not found)
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        return NextResponse.json({
+          success: false,
+          status: 'failed',
+          isComplete: true,
+          error: 'Prompt non trouvé',
+          message: 'Le prompt n\'existe pas ou a expiré',
+        });
+      }
+
+      // For other errors (network, timeout, etc.), return as still processing
+      // so the client can retry
+      return NextResponse.json({
+        success: true,
+        status: 'processing',
+        isComplete: false,
+        promptId: promptId,
+        message: 'Génération en cours... (reconnexion)',
+        retryable: true,
+      });
+    }
+
+    // Check if the API returned an error status
+    if (result.isError) {
+      return NextResponse.json({
+        success: false,
+        status: 'failed',
+        isComplete: true,
+        error: result.errorMessage || 'La génération a échoué',
+        promptId: result.promptId,
+      });
+    }
 
     // Check if we have media results
     const imageMedia = result.medias?.find(m => m.mediaType === 'IMAGE');
@@ -160,21 +230,39 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Still processing
+    // Still processing - get queue status for better progress info
+    let queueInfo = null;
+    try {
+      queueInfo = await getPromptQueueStatus(promptId);
+    } catch (queueError) {
+      console.warn('[AliveAI] Could not get queue status:', queueError);
+    }
+
     return NextResponse.json({
       success: true,
       status: 'processing',
       isComplete: false,
       promptId: result.promptId,
-      message: 'Génération en cours...',
+      message: queueInfo?.inQueue
+        ? `En file d'attente (position ${queueInfo.queuePosition + 1})...`
+        : 'Génération en cours...',
+      queuePosition: queueInfo?.queuePosition ?? -1,
+      progress: queueInfo?.progress ?? 0,
+      inQueue: queueInfo?.inQueue ?? true,
     });
 
   } catch (error) {
     console.error('AliveAI get-prompt error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erreur serveur' },
-      { status: 500 }
-    );
+    // Return as processing with retryable flag instead of 500
+    // This allows the client to continue polling
+    return NextResponse.json({
+      success: true,
+      status: 'processing',
+      isComplete: false,
+      message: 'Erreur temporaire, nouvelle tentative...',
+      retryable: true,
+      error: error instanceof Error ? error.message : 'Erreur serveur',
+    });
   }
 }
 

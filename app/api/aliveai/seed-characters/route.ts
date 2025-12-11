@@ -397,12 +397,24 @@ export async function POST(request: NextRequest) {
 
     console.log('Existing models deleted successfully');
 
+    // Helper function to wait between API calls to avoid rate limiting
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
     // Step 2: Generate and insert new characters
     const results: { name: string; success: boolean; error?: string; id?: string }[] = [];
 
-    for (const character of CHARACTER_DEFINITIONS) {
+    for (let i = 0; i < CHARACTER_DEFINITIONS.length; i++) {
+      const character = CHARACTER_DEFINITIONS[i];
+
+      // Wait 30 seconds between each character creation to avoid rate limiting
+      // (except for the first one)
+      if (i > 0) {
+        console.log(`Waiting 30 seconds before creating next character to avoid rate limiting...`);
+        await wait(30000);
+      }
+
       try {
-        console.log(`Processing ${character.name}...`);
+        console.log(`Processing ${character.name} (${i + 1}/${CHARACTER_DEFINITIONS.length})...`);
 
         // Generate image using AliveAI
         const avatarUrl = await generateCharacterImage(character);

@@ -83,6 +83,7 @@ function GenerationSlugContent({ slug }: { slug: string }) {
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState('Vetements');
@@ -142,61 +143,205 @@ function GenerationSlugContent({ slug }: { slug: string }) {
     return parts.join(', ');
   };
 
+  // Helper function to generate an image and return the mediaId
+  const generateImage = async (): Promise<{ imageUrl: string; mediaId: string } | null> => {
+    const customPrompt = buildFullPrompt();
+
+    // Send character attributes + custom prompt to AliveAI
+    const response = await fetch('/api/aliveai/generate-character', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: character!.name,
+        gender: character!.gender || 'femmes',
+        age: character!.age || 25,
+        ethnicities: character!.ethnicities || ['Occidental'],
+        hairType: character!.hair_type || 'straight',
+        hairColor: character!.hair_color || 'brown',
+        eyeColor: character!.eye_color || 'brown',
+        bodyType: character!.body_type || 'slim',
+        chestSize: character!.chest_size || 'medium',
+        personality: character!.personality,
+        customPrompt: customPrompt,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Erreur de génération');
+
+    const { promptId } = data;
+    setGenerationProgress('Image en cours de génération...');
+
+    // Poll for completion with better error handling
+    // Note: AliveAI can be slow and have network issues, so we use generous timeouts
+    let consecutiveErrors = 0;
+    let totalPolls = 0;
+    const maxConsecutiveErrors = 10; // Allow more errors due to AliveAI instability
+    const maxTotalPolls = 360; // Safety limit: 30 minutes total (360 * 5s = 1800s)
+
+    while (totalPolls < maxTotalPolls) {
+      await new Promise(r => setTimeout(r, 5000));
+      totalPolls++;
+
+      try {
+        const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
+        const statusData = await statusRes.json();
+
+        // Reset consecutive errors on any successful response
+        consecutiveErrors = 0;
+
+        // Check for completion
+        if (statusData.status === 'completed' && statusData.imageUrl) {
+          console.log('[Generation] Image completed successfully');
+          return { imageUrl: statusData.imageUrl, mediaId: statusData.mediaId };
+        } else if (statusData.status === 'failed') {
+          throw new Error(statusData.error || 'La génération d\'image a échoué');
+        }
+
+        // If this was a retryable error from the server (network issue on their end),
+        // just continue polling
+        if (statusData.retryable) {
+          console.log('[Generation] Retryable status received, continuing...');
+          setGenerationProgress('Reconnexion au serveur...');
+          continue;
+        }
+
+        // Show actual queue position and progress from AliveAI
+        const queuePosition = statusData.queuePosition;
+        const progress = statusData.progress ?? 0;
+
+        if (queuePosition !== undefined && queuePosition >= 0) {
+          // In queue - show position
+          if (progress > 0) {
+            setGenerationProgress(`Génération en cours... (${progress}%)`);
+          } else {
+            setGenerationProgress(`En file d'attente (position ${queuePosition + 1})...`);
+          }
+        } else {
+          // Not in queue but not complete yet - show generic message
+          setGenerationProgress('Génération en cours...');
+        }
+
+      } catch (fetchError) {
+        consecutiveErrors++;
+        console.warn(`[Generation] Polling error (${consecutiveErrors}/${maxConsecutiveErrors}):`, fetchError);
+
+        // If too many consecutive errors, fail
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error('Trop d\'erreurs consécutives lors de la génération. Veuillez réessayer.');
+        }
+        // Otherwise, continue polling
+        setGenerationProgress('Reconnexion...');
+      }
+    }
+    throw new Error('Timeout: la génération d\'image a pris trop de temps (30 min). Veuillez réessayer.');
+  };
+
+  // Helper function to generate video from an image
+  const generateVideo = async (mediaId: string): Promise<string> => {
+    const customPrompt = buildFullPrompt();
+    const videoPrompt = customPrompt || textareaContent || 'The person is moving naturally';
+    const truncatedPrompt = videoPrompt.length > 300 ? videoPrompt.substring(0, 297) + '...' : videoPrompt;
+
+    const response = await fetch('/api/aliveai/generate-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mediaId,
+        text: truncatedPrompt,
+        videoLength: 'SHORT',
+        videoFrameRate: 'MEDIUM',
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Erreur de génération vidéo');
+
+    const { promptId } = data;
+    setGenerationProgress('Vidéo en cours de génération... (cela peut prendre plusieurs minutes)');
+
+    // Poll for video completion with extended timeout for model loading
+    // Note: AliveAI may need to load the video model first, which can take extra time
+    let attempts = 0;
+    let consecutiveErrors = 0;
+    const maxAttempts = 180; // 15 minutes max (video generation can take longer due to model loading)
+    const maxConsecutiveErrors = 5;
+
+    while (attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 5000));
+
+      try {
+        const statusRes = await fetch(`/api/aliveai/generate-video?promptId=${promptId}`);
+        const statusData = await statusRes.json();
+
+        // Reset consecutive errors on successful response
+        consecutiveErrors = 0;
+
+        // Check for rate limiting
+        if (statusRes.status === 429) {
+          throw new Error(statusData.error || 'Service temporairement surchargé. Veuillez réessayer plus tard.');
+        }
+
+        if (statusData.status === 'completed' && statusData.videoUrl) {
+          return statusData.videoUrl;
+        } else if (statusData.status === 'failed') {
+          throw new Error(statusData.error || 'La génération de vidéo a échoué');
+        }
+        // If status is 'processing', continue polling
+
+      } catch (fetchError) {
+        // Check if this is a rate limiting error that should be surfaced immediately
+        if (fetchError instanceof Error && fetchError.message.includes('surchargé')) {
+          throw fetchError;
+        }
+
+        consecutiveErrors++;
+        console.warn(`[Video Generation] Polling error (${consecutiveErrors}/${maxConsecutiveErrors}):`, fetchError);
+
+        // If too many consecutive errors, fail
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error('Trop d\'erreurs consécutives lors de la génération vidéo');
+        }
+        // Otherwise, continue polling
+      }
+
+      attempts++;
+      // Provide more detailed progress info
+      const elapsedMinutes = Math.round((attempts * 5) / 60);
+      const progressPercent = Math.round((attempts / maxAttempts) * 100);
+      if (attempts < 24) {
+        setGenerationProgress(`Chargement du modèle vidéo... (${progressPercent}%)`);
+      } else {
+        setGenerationProgress(`Génération de la vidéo en cours... ${elapsedMinutes} min (${progressPercent}%)`);
+      }
+    }
+    throw new Error('Timeout: la génération de vidéo a pris trop de temps. Le serveur est peut-être surchargé, veuillez réessayer plus tard.');
+  };
+
   const handleGenerate = async () => {
     if (!character) return;
 
     setIsGenerating(true);
     setGenerationError(null);
     setGeneratedImageUrl(null);
+    setGeneratedVideoUrl(null);
     setGenerationProgress('Préparation de la génération...');
 
     try {
-      const customPrompt = buildFullPrompt();
+      const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
+      const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
+      const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
+      const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
+      const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
 
-      // Send character attributes + custom prompt to AliveAI
-      const response = await fetch('/api/aliveai/generate-character', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: character.name,
-          gender: character.gender || 'femmes',
-          age: character.age || 25,
-          ethnicities: character.ethnicities || ['Occidental'],
-          hairType: character.hair_type || 'straight',
-          hairColor: character.hair_color || 'brown',
-          eyeColor: character.eye_color || 'brown',
-          bodyType: character.body_type || 'slim',
-          chestSize: character.chest_size || 'medium',
-          personality: character.personality,
-          customPrompt: customPrompt, // User's selections + textarea
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erreur de génération');
-
-      const { promptId } = data;
-      setGenerationProgress('Image en cours de génération...');
-
-      // Poll for completion
-      let attempts = 0;
-      const maxAttempts = 60;
-      while (attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 5000));
-        const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
-        const statusData = await statusRes.json();
-
-        if (statusData.status === 'completed' && statusData.imageUrl) {
-          setGeneratedImageUrl(statusData.imageUrl);
+      if (mode === 'image') {
+        // Image-only generation
+        const result = await generateImage();
+        if (result) {
+          setGeneratedImageUrl(result.imageUrl);
           setGenerationProgress('');
 
           // Save to database
-          const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
-          const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
-          const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
-          const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
-          const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
-
           await supabase.from('image_generations').insert([{
             user_id: null,
             vetements_names: vetementsLabels,
@@ -204,21 +349,42 @@ function GenerationSlugContent({ slug }: { slug: string }) {
             poses_names: posesLabels,
             accessoires_names: accessoiresLabels,
             scenes_names: scenesLabels,
-            image_url: statusData.imageUrl,
+            image_url: result.imageUrl,
             image_count: 1,
             description: textareaContent,
             ai_model_id: character.id,
           }]);
-          break;
-        } else if (statusData.status === 'failed') {
-          throw new Error('La génération a échoué');
         }
-        attempts++;
-        setGenerationProgress(`Génération en cours... (${Math.round((attempts / maxAttempts) * 100)}%)`);
-      }
+      } else {
+        // Video generation: first create image, then convert to video
+        setGenerationProgress('Étape 1/2: Génération de l\'image source...');
+        const imageResult = await generateImage();
 
-      if (attempts >= maxAttempts) {
-        throw new Error('Timeout: la génération a pris trop de temps');
+        if (imageResult && imageResult.mediaId) {
+          setGeneratedImageUrl(imageResult.imageUrl);
+          setGenerationProgress('Étape 2/2: Conversion en vidéo...');
+
+          const videoUrl = await generateVideo(imageResult.mediaId);
+          setGeneratedVideoUrl(videoUrl);
+          setGenerationProgress('');
+
+          // Save to database
+          await supabase.from('image_generations').insert([{
+            user_id: null,
+            vetements_names: vetementsLabels,
+            actions_names: actionsLabels,
+            poses_names: posesLabels,
+            accessoires_names: accessoiresLabels,
+            scenes_names: scenesLabels,
+            image_url: imageResult.imageUrl,
+            video_url: videoUrl,
+            image_count: 1,
+            description: textareaContent,
+            ai_model_id: character.id,
+          }]);
+        } else {
+          throw new Error('Impossible de récupérer l\'ID de l\'image pour la génération vidéo');
+        }
       }
     } catch (err) {
       setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
@@ -254,6 +420,8 @@ function GenerationSlugContent({ slug }: { slug: string }) {
   const imgSrc = character.avatar_url || '/images/mock.png';
   const imgName = character.name;
   const hasGeneratedImage = !!generatedImageUrl;
+  const hasGeneratedVideo = !!generatedVideoUrl;
+  const hasGeneratedContent = hasGeneratedImage || hasGeneratedVideo;
 
   return (
     <div className="flex">
@@ -269,7 +437,7 @@ function GenerationSlugContent({ slug }: { slug: string }) {
         {/* Title and mode */}
         <div className="flex items-center gap-22 mb-8">
           <h1 className="text-3xl font-bold font-montserrat">Générateur</h1>
-          {!hasGeneratedImage && (
+          {!hasGeneratedContent && (
             <div className="flex gap-11">
               {['image', 'video'].map((m) => (
                 <button key={m} onClick={() => setMode(m as 'image' | 'video')} className="relative text-sm font-medium group focus:outline-none">
@@ -282,7 +450,7 @@ function GenerationSlugContent({ slug }: { slug: string }) {
         </div>
 
         {/* Main image + textarea + results */}
-        <div className={`flex gap-6 ${hasGeneratedImage ? 'mb-4 items-start' : 'mb-10'}`}>
+        <div className={`flex gap-6 ${hasGeneratedContent ? 'mb-4 items-start' : 'mb-10'}`}>
           {imgSrc && (
             <div className="rounded-3xl overflow-hidden relative w-1/3">
               <Image src={imgSrc} alt={imgName || ''} width={400} height={400} className="object-cover rounded-3xl" />
@@ -293,12 +461,12 @@ function GenerationSlugContent({ slug }: { slug: string }) {
           )}
 
           {/* Textarea */}
-          <div className={`relative flex flex-col ${hasGeneratedImage ? 'w-1/3' : 'w-2/3'}`}>
+          <div className={`relative flex flex-col ${hasGeneratedContent ? 'w-1/3' : 'w-2/3'}`}>
             <textarea
               value={textareaContent}
               onChange={(e) => setTextareaContent(e.target.value)}
               placeholder="Décrivez la scène souhaitée..."
-              className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${hasGeneratedImage ? 'w-full h-[317px]' : 'w-160 h-[311px]'}`}
+              className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${hasGeneratedContent ? 'w-full h-[317px]' : 'w-160 h-[311px]'}`}
               disabled={isGenerating}
             />
             <div className="absolute top-6 left-6 pointer-events-none">
@@ -315,13 +483,30 @@ function GenerationSlugContent({ slug }: { slug: string }) {
             )}
           </div>
 
-          {hasGeneratedImage && generatedImageUrl && (
+          {hasGeneratedContent && (
             <div className="w-1/3 flex flex-col items-start">
-              <h3 className="text-white text-xl font-bold mb-2">Images Générées</h3>
-              <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-3xl overflow-hidden relative block cursor-pointer" style={{ width: 240, height: 290 }}>
-                <Image src={generatedImageUrl} alt="Image générée" fill className="object-cover rounded-3xl" />
-              </a>
-              <p className="text-gray-400 text-sm mt-2">Cliquez pour ouvrir en grand</p>
+              <h3 className="text-white text-xl font-bold mb-2">
+                {hasGeneratedVideo ? 'Vidéo Générée' : 'Images Générées'}
+              </h3>
+              {hasGeneratedVideo && generatedVideoUrl ? (
+                <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
+                  <video
+                    src={generatedVideoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    className="w-full h-full object-cover rounded-3xl"
+                  />
+                </div>
+              ) : generatedImageUrl ? (
+                <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-3xl overflow-hidden relative block cursor-pointer" style={{ width: 240, height: 290 }}>
+                  <Image src={generatedImageUrl} alt="Image générée" fill className="object-cover rounded-3xl" />
+                </a>
+              ) : null}
+              <p className="text-gray-400 text-sm mt-2">
+                {hasGeneratedVideo ? 'Vidéo de 5 secondes' : 'Cliquez pour ouvrir en grand'}
+              </p>
             </div>
           )}
         </div>
