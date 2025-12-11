@@ -30,13 +30,29 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!name || !gender || !age || !ethnicities?.length) {
+      console.log('[AliveAI] Champs manquants:', { name, gender, age, ethnicities });
       return NextResponse.json(
         { error: 'Champs requis manquants' },
         { status: 400 }
       );
     }
 
-    // Construire le prompt visuel
+    // Log des caractéristiques du personnage reçues
+    console.log('[AliveAI] Caractéristiques du personnage:', {
+      name,
+      gender,
+      age,
+      ethnicities,
+      hairType,
+      hairColor,
+      eyeColor,
+      bodyType,
+      chestSize,
+      personality,
+      customPrompt: customPrompt?.substring(0, 100) + (customPrompt?.length > 100 ? '...' : ''),
+    });
+
+    // Construire le prompt visuel avec TOUTES les caractéristiques du personnage
     const appearance = buildAppearanceDescription({
       gender,
       age: Number(age),
@@ -48,6 +64,8 @@ export async function POST(request: NextRequest) {
       chestSize: chestSize ?? 'medium',
       customPrompt,
     });
+
+    console.log('[AliveAI] Description d\'apparence générée:', appearance);
 
     const finalAppearance = personality
       ? appearance.replace(
@@ -121,7 +139,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       isComplete: true,
+      status: 'completed',
       imageUrl: image.mediaUrl,
+      mediaId: image.id, // ID nécessaire pour la génération vidéo
       promptId,
     });
 
