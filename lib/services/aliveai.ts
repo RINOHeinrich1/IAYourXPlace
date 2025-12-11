@@ -17,6 +17,8 @@ export type Model = 'DEFAULT' | 'REALISM' | 'ANIME' | 'TEMPORARY';
 export type DetailLevel = 'MEDIUM' | 'HIGH';
 export type AspectRatio = 'DEFAULT' | 'SQUARE' | 'PORTRAIT' | 'LANDSCAPE';
 export type FaceModel = 'REALISM' | 'CREATIVE';
+export type VideoLength = 'SHORT' | 'MEDIUM'; // SHORT = 5s, MEDIUM = 10s
+export type VideoFrameRate = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface CreatePromptRequest {
   // Required fields
@@ -56,6 +58,10 @@ export interface PromptContainer {
   promptId: string;
   medias: MediaResponse[];
   isFavorite?: boolean;
+  // Error handling fields that AliveAI API may return
+  isError?: boolean;
+  errorMessage?: string;
+  status?: string;
 }
 
 export interface PromptProgressResponse {
@@ -66,6 +72,22 @@ export interface PromptProgressResponse {
   isError?: boolean;
   message?: string;
   queuePosition: number;
+}
+
+/**
+ * Request to create a video from an image
+ * API Endpoint: POST /prompts/image-to-video
+ */
+export interface CreateImageToVideoRequest {
+  mediaId: string;         // Required: ID of the source image
+  text: string;            // Required: Motion/action description (1-300 chars)
+  seed?: string;           // Optional: Seed for reproducibility
+  lastFrameMediaId?: string;
+  customImage?: boolean;
+  scene?: string;
+  createdFromPromptId?: string;
+  videoLength?: VideoLength;     // SHORT (5s) or MEDIUM (10s)
+  videoFrameRate?: VideoFrameRate; // LOW, MEDIUM, or HIGH
 }
 
 /**
@@ -80,18 +102,61 @@ function getApiToken(): string {
 }
 
 /**
+ * Helper function to fetch with retries for handling intermittent connection timeouts
+ * @param url - The URL to fetch
+ * @param options - Fetch options
+ * @param maxRetries - Maximum number of retry attempts
+ * @returns The fetch response
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[AliveAI] Attempt ${attempt}/${maxRetries} for ${options.method} ${url}`);
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      console.log(`[AliveAI] Attempt ${attempt} failed: ${lastError.message}`);
+
+      // Check if it's a connection timeout error
+      const isTimeoutError = lastError.message.includes('fetch failed') ||
+                             lastError.cause?.toString().includes('ConnectTimeoutError');
+
+      if (isTimeoutError && attempt < maxRetries) {
+        // Wait before retrying (exponential backoff: 2s, 4s, 8s...)
+        const waitTime = Math.pow(2, attempt) * 1000;
+        console.log(`[AliveAI] Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+
+      // If not a timeout error or last attempt, throw immediately
+      throw lastError;
+    }
+  }
+
+  throw lastError || new Error('All retry attempts failed');
+}
+
+/**
  * Create a new AI character image prompt
- * 
+ *
  * @param request - The prompt creation request
  * @returns The created prompt response with promptId
  */
 export async function createPrompt(request: CreatePromptRequest): Promise<CreatePromptResponse> {
   const token = getApiToken();
-  
+
   const url = new URL('/prompts', ALIVEAI_API_URL);
   url.searchParams.set('serverId', ALIVEAI_SERVER_ID);
-  
-  const response = await fetch(url.toString(), {
+
+  const response = await fetchWithRetry(url.toString(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -112,14 +177,14 @@ export async function createPrompt(request: CreatePromptRequest): Promise<Create
 
 /**
  * Get the status and result of a prompt
- * 
+ *
  * @param promptId - The ID of the prompt to check
  * @returns The prompt container with media results
  */
 export async function getPrompt(promptId: string): Promise<PromptContainer> {
   const token = getApiToken();
-  
-  const response = await fetch(`${ALIVEAI_API_URL}/prompts/${promptId}`, {
+
+  const response = await fetchWithRetry(`${ALIVEAI_API_URL}/prompts/${promptId}`, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -134,6 +199,104 @@ export async function getPrompt(promptId: string): Promise<PromptContainer> {
   }
 
   return response.json();
+}
+
+/**
+ * Create a video from an existing image using AliveAI
+ *
+ * @param request - The video creation request with mediaId and text prompt
+ * @returns The created prompt response with promptId
+ */
+export async function createImageToVideo(request: CreateImageToVideoRequest): Promise<CreatePromptResponse> {
+  const token = getApiToken();
+
+  const url = new URL('/prompts/image-to-video', ALIVEAI_API_URL);
+  url.searchParams.set('serverId', ALIVEAI_SERVER_ID);
+
+  const response = await fetchWithRetry(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      `AliveAI API error: ${response.status} - ${errorData.detail || errorData.message || response.statusText}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Response from the pending queue endpoint
+ */
+export interface PendingQueueResponse {
+  queue: Array<{
+    promptId: string;
+    queuePosition: number;
+    video: boolean;
+    progress: number;
+  }>;
+}
+
+/**
+ * Get the pending prompts queue from AliveAI
+ *
+ * @returns The pending queue with positions and progress
+ */
+export async function getPendingQueue(): Promise<PendingQueueResponse> {
+  const token = getApiToken();
+
+  const response = await fetchWithRetry(`${ALIVEAI_API_URL}/prompts/pending`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      `AliveAI API error: ${response.status} - ${errorData.detail || errorData.message || response.statusText}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Get the queue position and progress for a specific prompt
+ *
+ * @param promptId - The ID of the prompt to check
+ * @returns The queue position and progress, or null if not in queue (completed or not found)
+ */
+export async function getPromptQueueStatus(promptId: string): Promise<{
+  queuePosition: number;
+  progress: number;
+  inQueue: boolean;
+} | null> {
+  try {
+    const pendingQueue = await getPendingQueue();
+    const promptInQueue = pendingQueue.queue.find(p => p.promptId === promptId);
+
+    if (promptInQueue) {
+      return {
+        queuePosition: promptInQueue.queuePosition,
+        progress: promptInQueue.progress,
+        inQueue: true,
+      };
+    }
+
+    return { queuePosition: -1, progress: 100, inQueue: false };
+  } catch (error) {
+    console.warn('[AliveAI] Error fetching queue status:', error);
+    return null;
+  }
 }
 
 /**
@@ -303,4 +466,3 @@ export async function generateCharacterImage(params: {
     imageUrl: imageMedia.mediaUrl,
   };
 }
-

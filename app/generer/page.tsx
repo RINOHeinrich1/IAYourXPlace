@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import AIImage from '../components/AIImage';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
@@ -221,7 +222,7 @@ export default function GenererPage() {
                       onClick={() => setSelectedModel(model)}
                     >
                       {model.avatar_url ? (
-                        <Image src={model.avatar_url} alt={model.name} fill className="object-cover rounded-4xl" />
+                        <AIImage src={model.avatar_url} alt={model.name} fill className="object-cover rounded-4xl" />
                       ) : (
                         <div className="absolute inset-0 bg-gradient-to-br from-red-600/30 to-purple-600/30 rounded-4xl" />
                       )}
@@ -249,7 +250,7 @@ export default function GenererPage() {
                     <div className="flex items-center gap-6 mb-6 -mt-16">
                       <div className="relative w-32 h-40 rounded-2xl overflow-hidden">
                         {selectedModel.avatar_url ? (
-                          <Image src={selectedModel.avatar_url} alt={selectedModel.name} fill className="object-cover" />
+                          <AIImage src={selectedModel.avatar_url} alt={selectedModel.name} fill className="object-cover" />
                         ) : (
                           <div className="absolute inset-0 bg-gradient-to-br from-red-600/30 to-purple-600/30" />
                         )}
@@ -347,7 +348,7 @@ export default function GenererPage() {
                       onClick={() => handleSelectAIModel(model)}
                     >
                       {model.avatar_url ? (
-                        <Image src={model.avatar_url} alt={model.name} fill className="object-cover" />
+                        <AIImage src={model.avatar_url} alt={model.name} fill className="object-cover" />
                       ) : (
                         <div className="absolute inset-0 bg-gradient-to-br from-red-600/30 to-purple-600/30" />
                       )}

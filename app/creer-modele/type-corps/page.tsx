@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-// Note: Le store Zustand est adapté pour enregistrer des tableaux si nécessaire, mais l'interface `saveStep` doit le supporter.
 import { useModelStore } from '../../../store/useModelStore'; 
 
 // --- SIDEBAR (non modifié) ---
@@ -67,7 +66,7 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSe
             alt={label}
             fill
             className={`object-cover transition-all duration-300 rounded-4xl
-                ${isSelected ? "opacity-100 blur-0" : "opacity-44   -blur-[2px]"}
+                ${isSelected ? "opacity-100 blur-0" : "opacity-44 -blur-[2px]"}
             `}
         />
 
@@ -78,53 +77,33 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSe
 
         {/* Check icon */}
         {isSelected && (
-            <div className="absolute top-2 right-2 z-20 w-7 h-7  rounded-full flex items-center justify-center">
+            <div className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full flex items-center justify-center">
                <Image src="/icons/check.png" alt="Sélectionné" width={16} height={16} />
             </div>
         )}
     </div>
 );
 
-// --- PAGE PRINCIPALE (Modification pour la sélection multiple) ---
+// --- PAGE PRINCIPALE (corrigée avec bouton "Enregistrer et retourner") ---
 export default function TypeCorpsPage() {
     const router = useRouter();
+    const { saveStep, modelData } = useModelStore();
+    const [isSaving, setIsSaving] = useState(false);
 
-    // Store Zustand
-    const { bodyType: storedBodyType, chestSize: storedChestSize, saveStep } = useModelStore();
+    // États locaux avec sélection unique (pas multiple)
+    const [bodyType, setBodyType] = useState<string>(modelData.bodyType || '');
+    const [chestSize, setChestSize] = useState<string>(modelData.chestSize || '');
 
-    // États locaux
-    // Changement : Utilisation d'un tableau (string[]) pour la sélection multiple
-    const [bodyType, setBodyType] = useState<string[]>(Array.isArray(storedBodyType) ? storedBodyType : (storedBodyType ? [storedBodyType] : []));
-    const [chestSize, setChestSize] = useState<string[]>(Array.isArray(storedChestSize) ? storedChestSize : (storedChestSize ? [storedChestSize] : []));
-
-
-    // FONCTIONS DE GESTION DE LA SÉLECTION MULTIPLE
-    
+    // FONCTIONS DE GESTION DE LA SÉLECTION (unique, pas multiple)
     const handleBodyTypeChange = (label: string) => {
-        setBodyType(prev => {
-            if (prev.includes(label)) {
-                // Si déjà sélectionné, le retire
-                return prev.filter(item => item !== label);
-            } else {
-                // Sinon, l'ajoute
-                return [...prev, label];
-            }
-        });
+        setBodyType(label);
     };
 
     const handleChestSizeChange = (label: string) => {
-        setChestSize(prev => {
-            if (prev.includes(label)) {
-                // Si déjà sélectionné, le retire
-                return prev.filter(item => item !== label);
-            } else {
-                // Sinon, l'ajoute
-                return [...prev, label];
-            }
-        });
+        setChestSize(label);
     };
     
-    // DONNÉES AVEC CHEMINS D'IMAGE
+    // DONNÉES AVEC CHEMINS D'IMAGE (modifiez les chemins d'images selon vos besoins)
     const bodyTypes = [
         { label: 'Musclé', imagePath: '/images/origine1.png' }, 
         { label: 'Moyen', imagePath: '/images/origine1.png' }, 
@@ -139,20 +118,45 @@ export default function TypeCorpsPage() {
         { label: 'Extra Large', imagePath: '/images/origine1.png' }, 
     ];
 
+    const handleSaveAndReturn = async () => {
+        try {
+            setIsSaving(true);
+            
+            // Enregistrement des sélections dans le store
+            saveStep({ 
+                bodyType, 
+                chestSize 
+            });
+            
+            // Attendre un peu pour montrer l'effet de sauvegarde
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Retourner à la page de résumé
+            router.push('/creer-modele');
+        } catch (error) {
+            console.error('Erreur lors de la sauvegarde:', error);
+            alert('Erreur lors de la sauvegarde');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleNext = () => {
-        // Enregistre les tableaux de sélections
-        saveStep({ bodyType, chestSize });
-        router.push('/creer-modele/personnalite'); // page suivante
+        // Enregistre les sélections
+        saveStep({ 
+            bodyType, 
+            chestSize 
+        });
+        router.push('/creer-modele/personnalite');
     };
     
-    // Le bouton Suivant est activé si au moins un élément est sélectionné dans CHAQUE catégorie
-    const isNextButtonEnabled = bodyType.length > 0 && chestSize.length > 0;
-
+    // Le bouton Suivant est activé si un élément est sélectionné dans CHAQUE catégorie
+    const isNextButtonEnabled = bodyType && chestSize;
 
     const renderCards = (
         options: { label: string, imagePath: string }[],
-        selected: string[], // Changement : attend un tableau de sélections
-        onChange: (value: string) => void, // Changement : attend la fonction de modification
+        selected: string, // Changement : attend une seule sélection (string)
+        onChange: (value: string) => void,
         cardSizeClasses: string 
     ) => (
         <div className="flex justify-center gap-6 mb-16 flex-wrap">
@@ -161,8 +165,8 @@ export default function TypeCorpsPage() {
                     key={opt.label}
                     label={opt.label}
                     imagePath={opt.imagePath}
-                    // LOGIQUE DE SÉLECTION MULTIPLE : Vérifie si le label est inclus dans le tableau
-                    isSelected={selected.includes(opt.label)} 
+                    // LOGIQUE DE SÉLECTION UNIQUE : Vérifie si le label correspond à la sélection
+                    isSelected={selected === opt.label} 
                     // LOGIQUE D'ACTION : Passe l'élément sélectionné à la fonction de modification
                     onClick={() => onChange(opt.label)} 
                     sizeClasses={cardSizeClasses} 
@@ -172,9 +176,8 @@ export default function TypeCorpsPage() {
     );
     
     // Définition des classes de taille
-    const bodySizeClasses = 'w-40 h-50 '; 
-    const chestSizeClasses = 'w-53 h-60 '; 
-
+    const bodySizeClasses = 'w-40 h-50'; 
+    const chestSizeClasses = 'w-53 h-60'; 
 
     return (
         <div className="flex">
@@ -189,28 +192,45 @@ export default function TypeCorpsPage() {
                     </div>
                 </div>
 
-             
-
-                {/* CHOIX DU TYPE DE CORPS (Sélection multiple) */}
+                {/* CHOIX DU TYPE DE CORPS (Sélection unique) */}
                 <h2 className="text-white text-3xl font-bold text-center mb-10">Choisir le type de corps</h2>
                 {renderCards(bodyTypes, bodyType, handleBodyTypeChange, bodySizeClasses)}
 
-                {/* CHOIX DE LA TAILLE DE POITRINE (Sélection multiple) */}
+                {/* CHOIX DE LA TAILLE DE POITRINE (Sélection unique) */}
                 <h2 className="text-white text-3xl font-bold text-center mb-10">Choisissez la taille de poitrine</h2>
                 {renderCards(chestSizesData, chestSize, handleChestSizeChange, chestSizeClasses)}
 
-                {/* BOUTON SUIVANT */}
-                <div className="flex justify-center mt-8">
+                {/* BOUTONS D'ACTION */}
+                <div className="flex justify-center gap-6">
+                    {/* Bouton Enregistrer et retourner */}
+                    <button
+                        onClick={handleSaveAndReturn}
+                        disabled={isSaving}
+                        className={`w-[220px] py-4 rounded-xl text-white text-xl font-bold transition-colors
+                        ${isSaving ? 'bg-gray-500' : 'bg-gray-600 hover:bg-gray-700'}`}
+                    >
+                        {isSaving ? 'Enregistrement...' : 'Enregistrer et retourner'}
+                    </button>
+
+                    {/* Bouton Suivant */}
                     <button
                         onClick={handleNext}
-                        disabled={!isNextButtonEnabled}
+                        disabled={!isNextButtonEnabled || isSaving}
                         className={`w-[180px] py-4 rounded-xl text-white text-xl font-bold transition-colors 
-                        ${isNextButtonEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500 cursor-not-allowed'}`}
+                        ${isNextButtonEnabled && !isSaving ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500 cursor-not-allowed'}`}
                     >
                         SUIVANT
                     </button>
                 </div>
-                
+
+                {/* Affichage des sélections */}
+                <div className="mt-10 p-4 bg-gray-900 rounded-lg max-w-md mx-auto">
+                    <h3 className="text-white font-bold mb-2 text-center">Sélections actuelles :</h3>
+                    <div className="text-gray-300 text-center">
+                        <p>• Type de corps: {bodyType || 'Aucun'}</p>
+                        <p>• Taille de poitrine: {chestSize || 'Aucune'}</p>
+                    </div>
+                </div>
             </div>
         </div>
     );

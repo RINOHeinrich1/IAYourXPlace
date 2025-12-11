@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Gamepad2, HandCoins } from "lucide-react";
 import Image from "next/image";
+import AIImage from "../components/AIImage";
 import { useRouter } from "next/navigation";
 
 interface LiveActionCharacter {
@@ -95,7 +96,7 @@ export default function LiveActionPage() {
 
             {/* Profil TRÈS ROND */}
             <div className="absolute top-4 left-4 z-20 flex items-center space-x-3">
-              <Image
+              <AIImage
                 src={character?.avatar_url || "/images/group.png"}
                 alt={character?.name || "Profile"}
                 width={64}
@@ -109,7 +110,7 @@ export default function LiveActionPage() {
             </div>
 
             {/* Grande image */}
-            <Image
+            <AIImage
               src={character?.avatar_url || "/images/group.PNG"}
               alt={character?.name || "Live Model"}
               fill
