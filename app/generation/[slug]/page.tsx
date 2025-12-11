@@ -82,8 +82,9 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
-  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
+  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageCount, setImageCount] = useState(1);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState('Vetements');
@@ -98,10 +99,10 @@ function GenerationSlugContent({ slug }: { slug: string }) {
   const topLinks = ['Vetements', 'Actions', 'Poses', 'Accessoires', 'Scenes'];
   const smallCards: Card[] = [
     { id: 1, icon: '/icons/icon.png', value: 1 },
-    { id: 2, icon: '/icons/carer.png', value: 4 },
-    { id: 3, icon: '/icons/icon.png', value: 16 },
-    { id: 4, icon: '/icons/icon.png', value: 32 },
-    { id: 5, icon: '/icons/icon.png', value: 64 },
+    { id: 2, icon: '/icons/carer.png', value: 2 },
+    { id: 3, icon: '/icons/icon.png', value: 3 },
+    { id: 4, icon: '/icons/icon.png', value: 4 },
+   
   ];
 
   useEffect(() => {
@@ -143,255 +144,133 @@ function GenerationSlugContent({ slug }: { slug: string }) {
     return parts.join(', ');
   };
 
-  // Helper function to generate an image and return the mediaId
-  const generateImage = async (): Promise<{ imageUrl: string; mediaId: string } | null> => {
-    const customPrompt = buildFullPrompt();
+ const generateSingleImage = async (): Promise<string> => {
+  if (!character) throw new Error('Personnage non trouvé');
 
-    // Send character attributes + custom prompt to AliveAI
-    const response = await fetch('/api/aliveai/generate-character', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: character!.name,
-        gender: character!.gender || 'femmes',
-        age: character!.age || 25,
-        ethnicities: character!.ethnicities || ['Occidental'],
-        hairType: character!.hair_type || 'straight',
-        hairColor: character!.hair_color || 'brown',
-        eyeColor: character!.eye_color || 'brown',
-        bodyType: character!.body_type || 'slim',
-        chestSize: character!.chest_size || 'medium',
-        personality: character!.personality,
-        customPrompt: customPrompt,
-      }),
-    });
+  const customPrompt = buildFullPrompt(); // ta fonction qui construit le prompt depuis les choix de l'utilisateur
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Erreur de génération');
+  // Crée le prompt côté serveur
+  const response = await fetch('/api/aliveai/generate-character', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: character.name,
+      gender: character.gender || 'FEMALE',
+      age: character.age || 25,
+      ethnicities: character.ethnicities || ['Occidental'],
+      hairType: character.hair_type || 'straight',
+      hairColor: character.hair_color || 'brown',
+      eyeColor: character.eye_color || 'brown',
+      bodyType: character.body_type || 'slim',
+      chestSize: character.chest_size || 'medium',
+      personality: character.personality,
+      customPrompt: customPrompt,
+    }),
+  });
 
-    const { promptId } = data;
-    setGenerationProgress('Image en cours de génération...');
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Erreur de génération');
 
-    // Poll for completion with better error handling
-    // Note: AliveAI can be slow and have network issues, so we use generous timeouts
-    let consecutiveErrors = 0;
-    let totalPolls = 0;
-    const maxConsecutiveErrors = 10; // Allow more errors due to AliveAI instability
-    const maxTotalPolls = 360; // Safety limit: 30 minutes total (360 * 5s = 1800s)
+  const { promptId } = data;
 
-    while (totalPolls < maxTotalPolls) {
-      await new Promise(r => setTimeout(r, 5000));
-      totalPolls++;
+  // Polling pour récupérer l'image finale
+  let attempts = 0;
+  const maxAttempts = 60; // 5 minutes max si interval 5s
+  while (attempts < maxAttempts) {
+    await new Promise(r => setTimeout(r, 5000));
 
+    const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
+    const statusData = await statusRes.json();
+
+    console.log('[AliveAI Poll]', statusData); // toujours utile pour debug
+
+    if ((statusData.isComplete || statusData.status === 'completed') && statusData.imageUrl) {
+      return statusData.imageUrl;
+    } else if (statusData.status === 'failed') {
+      throw new Error('La génération a échoué');
+    }
+
+    attempts++;
+  }
+
+  throw new Error('Timeout: la génération a pris trop de temps');
+};
+
+const handleGenerate = async () => {
+  if (!character) return;
+
+  setIsGenerating(true);
+  setGenerationError(null);
+  setGeneratedImages([]);
+  setCurrentImageIndex(0);
+
+  try {
+    const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
+    const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
+    const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
+    const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
+    const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
+
+    const generatedImageUrls: string[] = [];
+
+    for (let i = 0; i < imageCount; i++) {
+      setGenerationProgress(`Génération de l'image ${i + 1}/${imageCount}...`);
+      
       try {
-        const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
-        const statusData = await statusRes.json();
+        const imageUrl = await generateSingleImage();
+        generatedImageUrls.push(imageUrl);
 
-        // Reset consecutive errors on any successful response
-        consecutiveErrors = 0;
+        // Enregistrer dans Supabase
+        await supabase.from('image_generations').insert([{
+          user_id: null,
+          vetements_names: vetementsLabels,
+          actions_names: actionsLabels,
+          poses_names: posesLabels,
+          accessoires_names: accessoiresLabels,
+          scenes_names: scenesLabels,
+          image_url: imageUrl,
+          image_count: imageCount,
+          description: textareaContent,
+          ai_model_id: character.id,
+          image_index: i,
+          batch_id: Date.now().toString(),
+        }]);
 
-        // Check for completion
-        if (statusData.status === 'completed' && statusData.imageUrl) {
-          console.log('[Generation] Image completed successfully');
-          return { imageUrl: statusData.imageUrl, mediaId: statusData.mediaId };
-        } else if (statusData.status === 'failed') {
-          throw new Error(statusData.error || 'La génération d\'image a échoué');
-        }
+        setGeneratedImages([...generatedImageUrls]);
+        setCurrentImageIndex(generatedImageUrls.length - 1);
 
-        // If this was a retryable error from the server (network issue on their end),
-        // just continue polling
-        if (statusData.retryable) {
-          console.log('[Generation] Retryable status received, continuing...');
-          setGenerationProgress('Reconnexion au serveur...');
-          continue;
-        }
-
-        // Show actual queue position and progress from AliveAI
-        const queuePosition = statusData.queuePosition;
-        const progress = statusData.progress ?? 0;
-
-        if (queuePosition !== undefined && queuePosition >= 0) {
-          // In queue - show position
-          if (progress > 0) {
-            setGenerationProgress(`Génération en cours... (${progress}%)`);
-          } else {
-            setGenerationProgress(`En file d'attente (position ${queuePosition + 1})...`);
-          }
+      } catch (err) {
+        if (generatedImageUrls.length === 0) {
+          throw err;
         } else {
-          // Not in queue but not complete yet - show generic message
-          setGenerationProgress('Génération en cours...');
+          console.warn(`Échec pour l'image ${i + 1}, mais ${generatedImageUrls.length} images ont été générées`);
         }
-
-      } catch (fetchError) {
-        consecutiveErrors++;
-        console.warn(`[Generation] Polling error (${consecutiveErrors}/${maxConsecutiveErrors}):`, fetchError);
-
-        // If too many consecutive errors, fail
-        if (consecutiveErrors >= maxConsecutiveErrors) {
-          throw new Error('Trop d\'erreurs consécutives lors de la génération. Veuillez réessayer.');
-        }
-        // Otherwise, continue polling
-        setGenerationProgress('Reconnexion...');
       }
     }
-    throw new Error('Timeout: la génération d\'image a pris trop de temps (30 min). Veuillez réessayer.');
-  };
 
-  // Helper function to generate video from an image
-  const generateVideo = async (mediaId: string): Promise<string> => {
-    const customPrompt = buildFullPrompt();
-    const videoPrompt = customPrompt || textareaContent || 'The person is moving naturally';
-    const truncatedPrompt = videoPrompt.length > 300 ? videoPrompt.substring(0, 297) + '...' : videoPrompt;
-
-    const response = await fetch('/api/aliveai/generate-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mediaId,
-        text: truncatedPrompt,
-        videoLength: 'SHORT',
-        videoFrameRate: 'MEDIUM',
-      }),
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Erreur de génération vidéo');
-
-    const { promptId } = data;
-    setGenerationProgress('Vidéo en cours de génération... (cela peut prendre plusieurs minutes)');
-
-    // Poll for video completion with extended timeout for model loading
-    // Note: AliveAI may need to load the video model first, which can take extra time
-    let attempts = 0;
-    let consecutiveErrors = 0;
-    const maxAttempts = 180; // 15 minutes max (video generation can take longer due to model loading)
-    const maxConsecutiveErrors = 5;
-
-    while (attempts < maxAttempts) {
-      await new Promise(r => setTimeout(r, 5000));
-
-      try {
-        const statusRes = await fetch(`/api/aliveai/generate-video?promptId=${promptId}`);
-        const statusData = await statusRes.json();
-
-        // Reset consecutive errors on successful response
-        consecutiveErrors = 0;
-
-        // Check for rate limiting
-        if (statusRes.status === 429) {
-          throw new Error(statusData.error || 'Service temporairement surchargé. Veuillez réessayer plus tard.');
-        }
-
-        if (statusData.status === 'completed' && statusData.videoUrl) {
-          return statusData.videoUrl;
-        } else if (statusData.status === 'failed') {
-          throw new Error(statusData.error || 'La génération de vidéo a échoué');
-        }
-        // If status is 'processing', continue polling
-
-      } catch (fetchError) {
-        // Check if this is a rate limiting error that should be surfaced immediately
-        if (fetchError instanceof Error && fetchError.message.includes('surchargé')) {
-          throw fetchError;
-        }
-
-        consecutiveErrors++;
-        console.warn(`[Video Generation] Polling error (${consecutiveErrors}/${maxConsecutiveErrors}):`, fetchError);
-
-        // If too many consecutive errors, fail
-        if (consecutiveErrors >= maxConsecutiveErrors) {
-          throw new Error('Trop d\'erreurs consécutives lors de la génération vidéo');
-        }
-        // Otherwise, continue polling
-      }
-
-      attempts++;
-      // Provide more detailed progress info
-      const elapsedMinutes = Math.round((attempts * 5) / 60);
-      const progressPercent = Math.round((attempts / maxAttempts) * 100);
-      if (attempts < 24) {
-        setGenerationProgress(`Chargement du modèle vidéo... (${progressPercent}%)`);
-      } else {
-        setGenerationProgress(`Génération de la vidéo en cours... ${elapsedMinutes} min (${progressPercent}%)`);
-      }
+    setGenerationProgress('');
+    if (generatedImageUrls.length === 0) {
+      throw new Error('Aucune image n\'a pu être générée');
     }
-    throw new Error('Timeout: la génération de vidéo a pris trop de temps. Le serveur est peut-être surchargé, veuillez réessayer plus tard.');
-  };
 
-  const handleGenerate = async () => {
-    if (!character) return;
+  } catch (err) {
+    setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
+  } finally {
+    setIsGenerating(false);
+  }
+};
 
-    setIsGenerating(true);
-    setGenerationError(null);
-    setGeneratedImageUrl(null);
-    setGeneratedVideoUrl(null);
-    setGenerationProgress('Préparation de la génération...');
+const handleNextImage = () => {
+  setCurrentImageIndex(prev => 
+    prev === generatedImages.length - 1 ? 0 : prev + 1
+  );
+};
 
-    try {
-      const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
-      const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
-      const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
-      const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
-      const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
-
-      if (mode === 'image') {
-        // Image-only generation
-        const result = await generateImage();
-        if (result) {
-          setGeneratedImageUrl(result.imageUrl);
-          setGenerationProgress('');
-
-          // Save to database
-          await supabase.from('image_generations').insert([{
-            user_id: null,
-            vetements_names: vetementsLabels,
-            actions_names: actionsLabels,
-            poses_names: posesLabels,
-            accessoires_names: accessoiresLabels,
-            scenes_names: scenesLabels,
-            image_url: result.imageUrl,
-            image_count: 1,
-            description: textareaContent,
-            ai_model_id: character.id,
-          }]);
-        }
-      } else {
-        // Video generation: first create image, then convert to video
-        setGenerationProgress('Étape 1/2: Génération de l\'image source...');
-        const imageResult = await generateImage();
-
-        if (imageResult && imageResult.mediaId) {
-          setGeneratedImageUrl(imageResult.imageUrl);
-          setGenerationProgress('Étape 2/2: Conversion en vidéo...');
-
-          const videoUrl = await generateVideo(imageResult.mediaId);
-          setGeneratedVideoUrl(videoUrl);
-          setGenerationProgress('');
-
-          // Save to database
-          await supabase.from('image_generations').insert([{
-            user_id: null,
-            vetements_names: vetementsLabels,
-            actions_names: actionsLabels,
-            poses_names: posesLabels,
-            accessoires_names: accessoiresLabels,
-            scenes_names: scenesLabels,
-            image_url: imageResult.imageUrl,
-            video_url: videoUrl,
-            image_count: 1,
-            description: textareaContent,
-            ai_model_id: character.id,
-          }]);
-        } else {
-          throw new Error('Impossible de récupérer l\'ID de l\'image pour la génération vidéo');
-        }
-      }
-    } catch (err) {
-      setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+const handlePrevImage = () => {
+  setCurrentImageIndex(prev => 
+    prev === 0 ? generatedImages.length - 1 : prev - 1
+  );
+};
 
   if (loadingCharacter) {
     return (
@@ -419,9 +298,8 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
   const imgSrc = character.avatar_url || '/images/mock.png';
   const imgName = character.name;
-  const hasGeneratedImage = !!generatedImageUrl;
-  const hasGeneratedVideo = !!generatedVideoUrl;
-  const hasGeneratedContent = hasGeneratedImage || hasGeneratedVideo;
+  const hasGeneratedImages = generatedImages.length > 0;
+  const currentImageUrl = hasGeneratedImages ? generatedImages[currentImageIndex] : null;
 
   return (
     <div className="flex">
@@ -437,7 +315,7 @@ function GenerationSlugContent({ slug }: { slug: string }) {
         {/* Title and mode */}
         <div className="flex items-center gap-22 mb-8">
           <h1 className="text-3xl font-bold font-montserrat">Générateur</h1>
-          {!hasGeneratedContent && (
+          {!hasGeneratedImages && (
             <div className="flex gap-11">
               {['image', 'video'].map((m) => (
                 <button key={m} onClick={() => setMode(m as 'image' | 'video')} className="relative text-sm font-medium group focus:outline-none">
@@ -450,99 +328,154 @@ function GenerationSlugContent({ slug }: { slug: string }) {
         </div>
 
         {/* Main image + textarea + results */}
-        <div className={`flex gap-6 ${hasGeneratedContent ? 'mb-4 items-start' : 'mb-10'}`}>
-          {imgSrc && (
-            <div className="rounded-3xl overflow-hidden relative w-1/3">
-              <Image src={imgSrc} alt={imgName || ''} width={400} height={400} className="object-cover rounded-3xl" />
-              <div className="absolute bottom-0 left-0 w-full h-20 flex items-end justify-start p-4" style={{ background: 'linear-gradient(180.83deg, rgba(0, 0, 0, 0.087) -8.53%, rgba(0, 0, 0, 0.58) 99.29%)' }}>
-                <span className="text-white text-3xl font-bold font-montserrat">{imgName || 'Personnage'}</span>
-              </div>
+        <div className={`flex gap-6 ${hasGeneratedImages ? 'mb-4 items-start' : 'mb-10'}`}>
+          {/* Image du personnage à gauche (toujours visible) */}
+          <div className="rounded-3xl overflow-hidden relative w-1/3">
+            <Image src={imgSrc} alt={imgName || ''} width={400} height={400} className="object-cover rounded-3xl" />
+            <div className="absolute bottom-0 left-0 w-full h-20 flex items-end justify-start p-4" style={{ background: 'linear-gradient(180.83deg, rgba(0, 0, 0, 0.087) -8.53%, rgba(0, 0, 0, 0.58) 99.29%)' }}>
+              <span className="text-white text-3xl font-bold font-montserrat">{imgName || 'Personnage'}</span>
             </div>
-          )}
+          </div>
 
-          {/* Textarea */}
-          <div className={`relative flex flex-col ${hasGeneratedContent ? 'w-1/3' : 'w-2/3'}`}>
+          {/* Textarea et résultats */}
+          <div className={`relative flex flex-col ${hasGeneratedImages ? 'w-1/3' : 'w-2/3'}`}>
             <textarea
               value={textareaContent}
               onChange={(e) => setTextareaContent(e.target.value)}
               placeholder="Décrivez la scène souhaitée..."
-              className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${hasGeneratedContent ? 'w-full h-[317px]' : 'w-160 h-[311px]'}`}
+              className={`p-4 pt-10 pl-12 rounded-4xl bg-white/10 text-white resize-none ${hasGeneratedImages ? 'w-full h-[317px]' : 'w-160 h-[311px]'}`}
               disabled={isGenerating}
             />
             <div className="absolute top-6 left-6 pointer-events-none">
               <Image src="/icons/edit.png" alt="Icône" width={29} height={28} style={{ filter: 'brightness(0) saturate(100%) invert(58%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(100%) contrast(88%)' }} />
             </div>
+            
             {generationProgress && (
               <div className="mt-4 flex items-center gap-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-red-600"></div>
                 <span className="text-gray-400">{generationProgress}</span>
               </div>
             )}
+            
             {generationError && (
               <div className="mt-4 p-3 bg-red-600/20 border border-red-600 rounded-xl text-red-400 text-sm">{generationError}</div>
             )}
           </div>
 
-          {hasGeneratedContent && (
-            <div className="w-1/3 flex flex-col items-start">
-              <h3 className="text-white text-xl font-bold mb-2">
-                {hasGeneratedVideo ? 'Vidéo Générée' : 'Images Générées'}
-              </h3>
-              {hasGeneratedVideo && generatedVideoUrl ? (
-                <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
-                  <video
-                    src={generatedVideoUrl}
-                    controls
-                    autoPlay
-                    loop
-                    muted
-                    className="w-full h-full object-cover rounded-3xl"
-                  />
-                </div>
-              ) : generatedImageUrl ? (
-                <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="rounded-3xl overflow-hidden relative block cursor-pointer" style={{ width: 240, height: 290 }}>
-                  <Image src={generatedImageUrl} alt="Image générée" fill className="object-cover rounded-3xl" />
-                </a>
-              ) : null}
-              <p className="text-gray-400 text-sm mt-2">
-                {hasGeneratedVideo ? 'Vidéo de 5 secondes' : 'Cliquez pour ouvrir en grand'}
-              </p>
-            </div>
-          )}
-        </div>
+         {/* Zone d'affichage des images générées */}
+{hasGeneratedImages && currentImageUrl && (
+  <div className="w-1/3 flex flex-col items-start">
+    <h3 className="text-white text-xl font-bold mb-2">
+      Images Générées ({generatedImages.length})
+    </h3>
 
-        {/* Category links */}
-        <div className="flex items-center justify-between mb-10">
-          <h2 className="text-white font-bold text-3xl">Actions</h2>
-          <div className="flex gap-11 mr-84">
-            {topLinks.map((link) => (
-              <button key={link} onClick={() => setActiveCategory(link)} className={`relative text-sm font-medium ${activeCategory === link ? 'text-white' : 'text-gray-400 hover:text-white'}`}>
-                {link}
-                <span className={`absolute left-0 -bottom-1 h-[2px] transition-all duration-300 ${activeCategory === link ? 'w-full bg-red-600' : 'w-0 group-hover:w-full bg-gray-600'}`}></span>
-              </button>
-            ))}
+    <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
+      {/* Utilisation de <img> au lieu de next/image */}
+      <img
+        src={currentImageUrl}
+        alt={`Image générée ${currentImageIndex + 1}`}
+        className="object-cover rounded-3xl w-full h-full"
+      />
+
+      {/* Navigation entre images si plus d'une */}
+      {generatedImages.length > 1 && (
+        <>
+          <div className="absolute inset-0 flex items-center justify-between p-4">
+            <button
+              onClick={handlePrevImage}
+              className="rounded-full p-2 hover: transition-colors z-20"
+            >
+              <img src="/icons/back_arrow_ios.png" alt="Précédent" width={24} height={24} />
+            </button>
+            <button
+              onClick={handleNextImage}
+              className="rounded-full p-2 hover: transition-colors z-20"
+            >
+              <img src="/icons/arrow-right.png" alt="Suivant" width={33} height={33} />
+            </button>
           </div>
-        </div>
 
-        {/* Category components */}
-        <div>
-          {activeCategory === 'Vetements' && <Vetements selectedIds={selectedVetements} toggleSelect={(id) => toggleSelect(setSelectedVetements, selectedVetements, id)} />}
-          {activeCategory === 'Actions' && <Actions selectedIds={selectedActions} toggleSelect={(id) => toggleSelect(setSelectedActions, selectedActions, id)} />}
-          {activeCategory === 'Poses' && <Poses selectedIds={selectedPoses} toggleSelect={(id) => toggleSelect(setSelectedPoses, selectedPoses, id)} />}
-          {activeCategory === 'Accessoires' && <Accessoires selectedIds={selectedAccessoires} toggleSelect={(id) => toggleSelect(setSelectedAccessoires, selectedAccessoires, id)} />}
-          {activeCategory === 'Scenes' && <Scenes selectedIds={selectedScenes} toggleSelect={(id) => toggleSelect(setSelectedScenes, selectedScenes, id)} />}
+          {/* Indicateur de position */}
+          <div className="absolute bottom-4 right-4 bg-black/50 rounded-full px-3 py-1 z-20">
+            <span className="text-white text-sm">
+              {currentImageIndex + 1}/{generatedImages.length}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+
+    {/* Miniatures */}
+    <div className="flex gap-2 mt-4">
+      {generatedImages.slice(0, 4).map((img, index) => (
+        <button
+          key={index}
+          onClick={() => setCurrentImageIndex(index)}
+          className={`rounded-lg overflow-hidden ${
+            index === currentImageIndex ? 'ring-2 ring-red-500' : 'opacity-70 hover:opacity-100'
+          }`}
+        >
+          <img
+            src={img}
+            alt={`Miniature ${index + 1}`}
+            className="object-cover w-[50px] h-[50px]"
+          />
+        </button>
+      ))}
+      {generatedImages.length > 4 && (
+        <div className="flex items-center justify-center w-[50px] h-[50px] bg-gray-800 rounded-lg">
+          <span className="text-gray-400 text-sm">+{generatedImages.length - 4}</span>
         </div>
+      )}
+    </div>
+
+    <p className="text-gray-400 text-sm mt-2">Cliquez pour télécharger ou partager</p>
+  </div>
+)}
+
+</div>
+        {/* Category links (masqué après génération) */}
+        {!hasGeneratedImages && (
+          <>
+            <div className="flex items-center justify-between mb-10">
+              <h2 className="text-white font-bold text-3xl">Actions</h2>
+              <div className="flex gap-11 mr-84">
+                {topLinks.map((link) => (
+                  <button key={link} onClick={() => setActiveCategory(link)} className={`relative text-sm font-medium ${activeCategory === link ? 'text-white' : 'text-gray-400 hover:text-white'}`}>
+                    {link}
+                    <span className={`absolute left-0 -bottom-1 h-[2px] transition-all duration-300 ${activeCategory === link ? 'w-full bg-red-600' : 'w-0 group-hover:w-full bg-gray-600'}`}></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Category components */}
+            <div>
+              {activeCategory === 'Vetements' && <Vetements selectedIds={selectedVetements} toggleSelect={(id) => toggleSelect(setSelectedVetements, selectedVetements, id)} />}
+              {activeCategory === 'Actions' && <Actions selectedIds={selectedActions} toggleSelect={(id) => toggleSelect(setSelectedActions, selectedActions, id)} />}
+              {activeCategory === 'Poses' && <Poses selectedIds={selectedPoses} toggleSelect={(id) => toggleSelect(setSelectedPoses, selectedPoses, id)} />}
+              {activeCategory === 'Accessoires' && <Accessoires selectedIds={selectedAccessoires} toggleSelect={(id) => toggleSelect(setSelectedAccessoires, selectedAccessoires, id)} />}
+              {activeCategory === 'Scenes' && <Scenes selectedIds={selectedScenes} toggleSelect={(id) => toggleSelect(setSelectedScenes, selectedScenes, id)} />}
+            </div>
+          </>
+        )}
 
         {/* Number of images (only for image mode) */}
-        {mode === 'image' && (
+        {mode === 'image' && !hasGeneratedImages && (
           <>
             <h2 className="text-white font-bold text-2xl mb-6">Nombre d&apos;images</h2>
             <div className="flex gap-4 mb-8">
-              {smallCards.map((card, index) => (
-                <div key={card.id} className={`flex items-center gap-2 w-[82px] h-[43px] rounded-xl p-2 justify-center ${index === 0 ? 'bg-red-600' : 'bg-[rgba(87,87,87,1)]'}`}>
+              {smallCards.map((card) => (
+                <button
+                  key={card.id}
+                  onClick={() => setImageCount(card.value)}
+                  className={`flex items-center gap-2 w-[82px] h-[43px] rounded-xl p-2 justify-center transition-colors ${
+                    imageCount === card.value ? 'bg-red-600' : 'bg-[rgba(87,87,87,1)] hover:bg-gray-600'
+                  }`}
+                >
                   <Image src={card.icon} alt="icon" width={17} height={11} />
                   <span className="text-white font-bold">{card.value}</span>
-                </div>
+                </button>
               ))}
             </div>
           </>
@@ -550,13 +483,33 @@ function GenerationSlugContent({ slug }: { slug: string }) {
 
         {/* Generate button */}
         <div className="flex justify-center mb-10">
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className={`px-8 py-3 rounded-xl font-bold text-lg transition ${isGenerating ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
-          >
-            {isGenerating ? 'Génération en cours...' : `Générer ${mode === 'video' ? 'une Vidéo' : 'une Image'}`}
-          </button>
+          {hasGeneratedImages ? (
+            <div className="flex gap-4">
+              <button 
+                onClick={() => {
+                  setGeneratedImages([]);
+                  setCurrentImageIndex(0);
+                }}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                Générer de nouvelles images
+              </button>
+              {/* <button 
+                onClick={() => handleGenerate()}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition-colors"
+              >
+                Générer à nouveau
+              </button> */}
+            </div>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className={`px-8 py-3 rounded-xl font-bold text-lg transition ${isGenerating ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+            >
+              {isGenerating ? 'Génération en cours...' : `Générer ${imageCount} Image${imageCount > 1 ? 's' : ''}`}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -466,4 +466,3 @@ export async function generateCharacterImage(params: {
     imageUrl: imageMedia.mediaUrl,
   };
 }
-

@@ -1,34 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import {
   createPrompt,
   getPrompt,
-  getPromptQueueStatus,
   mapGender,
   mapEthnicityToLocation,
   buildAppearanceDescription,
   CreatePromptRequest,
 } from '@/lib/services/aliveai';
 
-/**
- * POST /api/aliveai/generate-character
- * 
- * Generate an AI character image using the AliveAI API.
- * This endpoint creates a prompt and returns the promptId for tracking.
- * The client can then poll for completion or use WebSocket for real-time updates.
- */
+/* =========================================================
+   POST → Lancer la génération AliveAI
+========================================================= */
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate user
-    const supabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
-
-    // Parse request body
     const body = await request.json();
+
     const {
       name,
       gender,
@@ -40,129 +26,74 @@ export async function POST(request: NextRequest) {
       bodyType,
       chestSize,
       personality,
-      customPrompt, // New: user's custom prompt for the image
+      customPrompt,
     } = body;
 
-    // Validate required fields
     if (!name || !gender || !age || !ethnicities?.length) {
       return NextResponse.json(
-        { error: 'Champs requis manquants: name, gender, age, ethnicities' },
+        { error: 'Champs requis manquants' },
         { status: 400 }
       );
     }
 
-    // Build appearance description with custom prompt included
-    const fullAppearance = buildAppearanceDescription({
+    // Construire le prompt visuel
+    const appearance = buildAppearanceDescription({
       gender,
       age: Number(age),
-      ethnicities: Array.isArray(ethnicities) ? ethnicities : [ethnicities],
-      hairType: hairType || 'straight',
-      hairColor: hairColor || 'brown',
-      eyeColor: eyeColor || 'brown',
-      bodyType: bodyType || 'slim',
-      chestSize: chestSize || 'medium',
-      customPrompt: customPrompt, // Include custom prompt in appearance
+      ethnicities,
+      hairType: hairType ?? 'straight',
+      hairColor: hairColor ?? 'black',
+      eyeColor: eyeColor ?? 'brown',
+      bodyType: bodyType ?? 'slim',
+      chestSize: chestSize ?? 'medium',
+      customPrompt,
     });
 
-    // Add personality expression if provided
-    let appearanceWithPersonality = fullAppearance;
-    if (personality) {
-      const personalityStr = Array.isArray(personality) ? personality.join(', ') : personality;
-      appearanceWithPersonality = fullAppearance.replace(
-        ', high quality, photorealistic',
-        `, ${personalityStr} expression, high quality, photorealistic`
-      );
-    }
+    const finalAppearance = personality
+      ? appearance.replace(
+          ', high quality, photorealistic',
+          `, ${personality} expression, high quality, photorealistic`
+        )
+      : appearance;
 
-    console.log('[AliveAI] Full appearance prompt:', appearanceWithPersonality);
-    console.log('[AliveAI] Custom prompt received:', customPrompt);
-
-    // Create AliveAI prompt request
-    // Use custom prompt in BOTH appearance AND scene fields for maximum effect
     const promptRequest: CreatePromptRequest = {
       name,
-      appearance: appearanceWithPersonality,
+      appearance: finalAppearance,
       detailLevel: 'HIGH',
       gender: mapGender(gender),
-      fromLocation: mapEthnicityToLocation(
-        Array.isArray(ethnicities) ? ethnicities : [ethnicities]
-      ),
+      fromLocation: mapEthnicityToLocation(ethnicities),
       faceImproveEnabled: true,
       faceModel: 'REALISM',
       model: 'REALISM',
       aspectRatio: 'PORTRAIT',
       blockExplicitContent: false,
-      // Set scene field with custom prompt for additional context
-      scene: customPrompt && customPrompt.trim() ? customPrompt.trim() : undefined,
+      scene: customPrompt?.trim() || undefined,
     };
 
-    console.log('[AliveAI] Full request:', JSON.stringify(promptRequest, null, 2));
+    console.log('[AliveAI] Prompt envoyé:', promptRequest);
 
-    // Create the prompt with AliveAI
-    const response = await createPrompt(promptRequest);
+    const result = await createPrompt(promptRequest);
 
     return NextResponse.json({
       success: true,
-      promptId: response.promptId,
-      seed: response.seed,
-      message: 'Génération d\'image en cours...',
+      promptId: result.promptId,
+      seed: result.seed,
     });
 
-  } catch (error) {
-    console.error('AliveAI generate-character error:', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Erreur serveur';
-
-    // Check for rate limiting errors from AliveAI API
-    if (errorMessage.includes('Max pending creations') ||
-        errorMessage.includes('Too many requests') ||
-        errorMessage.includes('rate limit')) {
-      return NextResponse.json(
-        {
-          error: 'Le service de génération d\'images est temporairement surchargé. Veuillez réessayer dans quelques minutes.',
-          code: 'RATE_LIMITED',
-          retryAfter: 60, // Suggest retry after 60 seconds
-        },
-        { status: 429 }
-      );
-    }
-
-    // Check for authentication errors
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      return NextResponse.json(
-        {
-          error: 'Erreur d\'authentification avec le service de génération d\'images.',
-          code: 'AUTH_ERROR',
-        },
-        { status: 503 }
-      );
-    }
-
-    // Generic server error
+  } catch (error: any) {
+    console.error('[AliveAI POST ERROR]', error);
     return NextResponse.json(
-      { error: errorMessage },
+      { error: error.message || 'Erreur serveur AliveAI' },
       { status: 500 }
     );
   }
 }
 
-/**
- * GET /api/aliveai/generate-character?promptId=xxx
- *
- * Check the status of a character generation prompt.
- * Returns the generated image URL when complete.
- */
+/* =========================================================
+   GET → Vérifier l’état de la génération et retourner l’image
+========================================================= */
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
-    const supabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
-
-    // Get promptId from query params
     const { searchParams } = new URL(request.url);
     const promptId = searchParams.get('promptId');
 
@@ -173,96 +104,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get prompt status from AliveAI
-    let result;
-    try {
-      result = await getPrompt(promptId);
-    } catch (apiError) {
-      // Log but don't fail - treat as "still processing" for transient errors
-      console.warn('[AliveAI] Error fetching prompt status:', apiError);
-      const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error';
+    const result = await getPrompt(promptId);
 
-      // Check if it's a permanent error (e.g., prompt not found)
-      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
-        return NextResponse.json({
-          success: false,
-          status: 'failed',
-          isComplete: true,
-          error: 'Prompt non trouvé',
-          message: 'Le prompt n\'existe pas ou a expiré',
-        });
-      }
+    const image = result.medias?.find(
+      (m) => m.mediaType === 'IMAGE' && m.mediaUrl
+    );
 
-      // For other errors (network, timeout, etc.), return as still processing
-      // so the client can retry
+    if (!image) {
       return NextResponse.json({
         success: true,
-        status: 'processing',
         isComplete: false,
-        promptId: promptId,
-        message: 'Génération en cours... (reconnexion)',
-        retryable: true,
+        status: 'processing',
       });
-    }
-
-    // Check if the API returned an error status
-    if (result.isError) {
-      return NextResponse.json({
-        success: false,
-        status: 'failed',
-        isComplete: true,
-        error: result.errorMessage || 'La génération a échoué',
-        promptId: result.promptId,
-      });
-    }
-
-    // Check if we have media results
-    const imageMedia = result.medias?.find(m => m.mediaType === 'IMAGE');
-
-    if (imageMedia) {
-      return NextResponse.json({
-        success: true,
-        status: 'completed',
-        isComplete: true,
-        imageUrl: imageMedia.mediaUrl,
-        mediaId: imageMedia.id,
-        promptId: result.promptId,
-      });
-    }
-
-    // Still processing - get queue status for better progress info
-    let queueInfo = null;
-    try {
-      queueInfo = await getPromptQueueStatus(promptId);
-    } catch (queueError) {
-      console.warn('[AliveAI] Could not get queue status:', queueError);
     }
 
     return NextResponse.json({
       success: true,
-      status: 'processing',
-      isComplete: false,
-      promptId: result.promptId,
-      message: queueInfo?.inQueue
-        ? `En file d'attente (position ${queueInfo.queuePosition + 1})...`
-        : 'Génération en cours...',
-      queuePosition: queueInfo?.queuePosition ?? -1,
-      progress: queueInfo?.progress ?? 0,
-      inQueue: queueInfo?.inQueue ?? true,
+      isComplete: true,
+      imageUrl: image.mediaUrl,
+      promptId,
     });
 
-  } catch (error) {
-    console.error('AliveAI get-prompt error:', error);
-    // Return as processing with retryable flag instead of 500
-    // This allows the client to continue polling
-    return NextResponse.json({
-      success: true,
-      status: 'processing',
-      isComplete: false,
-      message: 'Erreur temporaire, nouvelle tentative...',
-      retryable: true,
-      error: error instanceof Error ? error.message : 'Erreur serveur',
-    });
+  } catch (error: any) {
+    console.error('[AliveAI GET ERROR]', error);
+    return NextResponse.json(
+      { error: error.message || 'Erreur récupération image' },
+      { status: 500 }
+    );
   }
 }
-

@@ -62,8 +62,6 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSe
         onClick={onClick}
         className={`relative w-36 h-56 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 transform hover:scale-105 ${isSelected ? '' : ''}`}
     >
-
-        {/* Image principale : Conserve la logique de l'image de remplacement /images/j.jpg si sélectionné */}
         <Image
             src={isSelected ? "/images/j.jpg" : imagePath}
             alt={label}
@@ -71,15 +69,12 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSe
             className={`object-cover transition-all duration-300
                 ${isSelected ? "opacity-100 blur-0" : "opacity-48 -blur-[2px]"} 
             `}
-            // NOTE: J'ai corrigé -blur-[2px] en blur-[2px] pour que Tailwind fonctionne correctement.
         />
 
-        {/* Label */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex items-end justify-center p-3 text-center">
             <span className="text-white text-lg font-bold z-10">{label}</span>
         </div>
 
-        {/* Check icon (Utilise isSelected) */}
         {isSelected && (
             <div className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xl">
                <Image src="/icons/check.png" alt="User Icon" width={20} height={20} />
@@ -88,23 +83,22 @@ const ChoiceCard: React.FC<ChoiceCardProps> = ({ label, imagePath, onClick, isSe
     </div>
 );
 
-// --- PAGE (Ajout de la couleur des yeux) -----------------------------------------
+// --- PAGE (corrigée avec bouton "Enregistrer et retourner") -----------------------------------------
 export default function TypeCheveuxPage() {
     const router = useRouter();
-    const saveStep = useModelStore((state) => state.saveStep);
-    const modelData = useModelStore((state) => state.modelData);
+    const { saveStep, modelData } = useModelStore();
+    const [isSaving, setIsSaving] = useState(false);
 
     // Initialisation des états avec des TABLEAUX pour la multi-sélection
     const initialHairType = Array.isArray(modelData.hairType) ? modelData.hairType : (modelData.hairType ? [modelData.hairType] : []);
     const initialHairColor = Array.isArray(modelData.hairColor) ? modelData.hairColor : (modelData.hairColor ? [modelData.hairColor] : []);
-    // NOUVEL ÉTAT pour la couleur des yeux (on suppose une sélection unique ici, sinon utilisez un tableau)
     const initialEyeColor = modelData.eyeColor || null;
     
     const [selectedTypes, setSelectedTypes] = useState<string[]>(initialHairType);
     const [selectedColors, setSelectedColors] = useState<string[]>(initialHairColor);
-    const [selectedEyeColor, setSelectedEyeColor] = useState<string | null>(initialEyeColor); // Choix unique
+    const [selectedEyeColor, setSelectedEyeColor] = useState<string | null>(initialEyeColor);
 
-    // Logique de bascule pour la multi-sélection (utilisée pour types et couleurs de cheveux)
+    // Logique de bascule pour la multi-sélection
     const toggleSelect = (value: string, setter: React.Dispatch<React.SetStateAction<string[]>>, selectedArray: string[]) => {
         if (selectedArray.includes(value)) {
             setter(selectedArray.filter((v) => v !== value));
@@ -130,27 +124,48 @@ export default function TypeCheveuxPage() {
         { label: 'Rose', imagePath: '/images/cheuveux10.png' },
     ];
     
-    // NOUVELLES DONNÉES pour la couleur des yeux
     const eyeColors = [
-        { label: 'Marron', imagePath: '/images/yeux1.png' }, // Images à adapter
+        { label: 'Marron', imagePath: '/images/yeux1.png' },
         { label: 'Bleu', imagePath: '/images/yeux2.png' },
         { label: 'Vert', imagePath: '/images/yeux3.png' },
     ];
-    // --- FIN DONNÉES ---
 
+    const handleSaveAndReturn = async () => {
+        try {
+            setIsSaving(true);
+            
+            // Enregistrement des sélections dans le store
+            saveStep({
+                hairType: selectedTypes,
+                hairColor: selectedColors,
+                eyeColor: selectedEyeColor,
+            });
+            
+            // Attendre un peu pour montrer l'effet de sauvegarde
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Retourner à la page de résumé
+            router.push('/creer-modele');
+        } catch (error) {
+            console.error('Erreur lors de la sauvegarde:', error);
+            alert('Erreur lors de la sauvegarde');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleNext = () => {
-        // Enregistrement des sélections, incluant la couleur des yeux
+        // Enregistrement des sélections
         saveStep({
             hairType: selectedTypes,
             hairColor: selectedColors,
-            eyeColor: selectedEyeColor, // AJOUT
+            eyeColor: selectedEyeColor,
         });
 
         router.push('/creer-modele/type-corps');
     };
     
-    // Le bouton SUIVANT est activé si au moins un élément de chaque catégorie (cheveux type, cheveux couleur, et couleur des yeux) est sélectionné
+    // Le bouton SUIVANT est activé si au moins un élément de chaque catégorie est sélectionné
     const isNextButtonEnabled = selectedTypes.length > 0 && selectedColors.length > 0 && !!selectedEyeColor;
 
     return (
@@ -196,7 +211,7 @@ export default function TypeCheveuxPage() {
                     ))}
                 </div>
                 
-                {/* COULEUR DES YEUX (NOUVELLE SECTION) */}
+                {/* COULEUR DES YEUX */}
                 <h2 className="text-white text-3xl font-bold text-center mb-10">Couleur des yeux</h2>
 
                 <div className="flex justify-center gap-4 mb-16">
@@ -205,25 +220,43 @@ export default function TypeCheveuxPage() {
                             key={eye.label}
                             label={eye.label}
                             imagePath={eye.imagePath}
-                            // Pour la couleur des yeux, on utilise une sélection unique (string | null)
-                            isSelected={selectedEyeColor === eye.label} 
+                            isSelected={selectedEyeColor === eye.label}
                             onClick={() => setSelectedEyeColor(eye.label)}
                         />
                     ))}
                 </div>
-                {/* FIN COULEUR DES YEUX */}
 
+                {/* BOUTONS D'ACTION */}
+                <div className="flex justify-center gap-6">
+                    {/* Bouton Enregistrer et retourner */}
+                    <button
+                        onClick={handleSaveAndReturn}
+                        disabled={isSaving}
+                        className={`w-[220px] py-4 rounded-xl text-white text-xl font-bold transition-colors
+                        ${isSaving ? 'bg-gray-500' : 'bg-gray-600 hover:bg-gray-700'}`}
+                    >
+                        {isSaving ? 'Enregistrement...' : 'Enregistrer et retourner'}
+                    </button>
 
-                {/* BOUTON SUIVANT */}
-                <div className="flex justify-center">
+                    {/* Bouton Suivant */}
                     <button
                         onClick={handleNext}
-                        disabled={!isNextButtonEnabled}
+                        disabled={!isNextButtonEnabled || isSaving}
                         className={`w-[180px] py-4 rounded-xl text-white text-xl font-bold transition-colors 
-                        ${isNextButtonEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500 cursor-not-allowed'}`}
+                        ${isNextButtonEnabled && !isSaving ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500 cursor-not-allowed'}`}
                     >
                         SUIVANT
                     </button>
+                </div>
+
+                {/* Affichage des sélections */}
+                <div className="mt-10 p-4 bg-gray-900 rounded-lg max-w-md mx-auto">
+                    <h3 className="text-white font-bold mb-2 text-center">Sélections actuelles :</h3>
+                    <div className="text-gray-300 text-center">
+                        <p>• Type de cheveux: {selectedTypes.join(', ') || 'Aucun'}</p>
+                        <p>• Couleur de cheveux: {selectedColors.join(', ') || 'Aucune'}</p>
+                        <p>• Couleur des yeux: {selectedEyeColor || 'Aucune'}</p>
+                    </div>
                 </div>
             </div>
         </div>
