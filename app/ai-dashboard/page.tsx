@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import AIImage from '../components/AIImage';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -218,7 +219,7 @@ return(
             href={`/profil/${model.slug}?id=${model.id}`}
             className="relative block w-full h-full z-0"
           >
-            <Image
+            <AIImage
               src={model.src}
               alt={model.name}
               fill
@@ -294,11 +295,11 @@ return(
     "
   >
             {/* Image de fond du personnage */}
-            <Image
+            <AIImage
                 src={character.src}
                 alt={character.name}
-                layout="fill"
-                objectFit="cover"
+                fill
+                style={{ objectFit: 'cover' }}
                 className="object-cover"
             />
 

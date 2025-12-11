@@ -89,6 +89,10 @@ function GenerationSlugContent({ slug }: { slug: string }) {
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState('Vetements');
 
+  // Video generation states
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
+  const [lastGeneratedMediaId, setLastGeneratedMediaId] = useState<string | null>(null);
+
   const [selectedVetements, setSelectedVetements] = useState<number[]>([]);
   const [selectedActions, setSelectedActions] = useState<number[]>([]);
   const [selectedPoses, setSelectedPoses] = useState<number[]>([]);
@@ -99,10 +103,10 @@ function GenerationSlugContent({ slug }: { slug: string }) {
   const topLinks = ['Vetements', 'Actions', 'Poses', 'Accessoires', 'Scenes'];
   const smallCards: Card[] = [
     { id: 1, icon: '/icons/icon.png', value: 1 },
-    { id: 2, icon: '/icons/carer.png', value: 4 },
-    { id: 3, icon: '/icons/icon.png', value: 16 },
-    { id: 4, icon: '/icons/icon.png', value: 32 },
-    { id: 5, icon: '/icons/icon.png', value: 64 },
+    { id: 2, icon: '/icons/carer.png', value: 2 },
+    { id: 3, icon: '/icons/icon.png', value: 3 },
+    { id: 4, icon: '/icons/icon.png', value: 4 },
+   
   ];
 
   useEffect(() => {
@@ -144,125 +148,282 @@ function GenerationSlugContent({ slug }: { slug: string }) {
     return parts.join(', ');
   };
 
-  const generateSingleImage = async (): Promise<string> => {
-    if (!character) throw new Error('Personnage non trouvé');
+ const generateSingleImage = async (): Promise<string> => {
+  if (!character) throw new Error('Personnage non trouvé');
 
+  const customPrompt = buildFullPrompt(); // ta fonction qui construit le prompt depuis les choix de l'utilisateur
+
+  // Construire les paramètres du personnage avec ses vraies caractéristiques
+  const characterParams = {
+    name: character.name,
+    gender: character.gender || 'femmes', // Valeurs attendues: 'femmes' ou 'hommes'
+    age: character.age || 25,
+    ethnicities: character.ethnicities?.length ? character.ethnicities : ['Occidental'],
+    hairType: character.hair_type || 'straight',
+    hairColor: character.hair_color || 'brown',
+    eyeColor: character.eye_color || 'brown',
+    bodyType: character.body_type || 'slim',
+    chestSize: character.chest_size || 'medium',
+    personality: character.personality || '',
+    customPrompt: customPrompt,
+  };
+
+  console.log('[Generation] Paramètres du personnage:', characterParams);
+
+  // Crée le prompt côté serveur
+  const response = await fetch('/api/aliveai/generate-character', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(characterParams),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Erreur de génération');
+
+  const { promptId } = data;
+
+  // Polling pour récupérer l'image finale
+  let attempts = 0;
+  const maxAttempts = 60; // 5 minutes max si interval 5s
+  while (attempts < maxAttempts) {
+    await new Promise(r => setTimeout(r, 5000));
+
+    const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
+    const statusData = await statusRes.json();
+
+    console.log('[AliveAI Poll]', statusData); // toujours utile pour debug
+
+    if ((statusData.isComplete || statusData.status === 'completed') && statusData.imageUrl) {
+      return statusData.imageUrl;
+    } else if (statusData.status === 'failed') {
+      throw new Error('La génération a échoué');
+    }
+
+    attempts++;
+  }
+
+  throw new Error('Timeout: la génération a pris trop de temps');
+};
+
+const handleGenerate = async () => {
+  if (!character) return;
+
+  setIsGenerating(true);
+  setGenerationError(null);
+  setGeneratedImages([]);
+  setCurrentImageIndex(0);
+
+  try {
+    const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
+    const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
+    const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
+    const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
+    const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
+
+    const generatedImageUrls: string[] = [];
+
+    for (let i = 0; i < imageCount; i++) {
+      setGenerationProgress(`Génération de l'image ${i + 1}/${imageCount}...`);
+      
+      try {
+        const imageUrl = await generateSingleImage();
+        generatedImageUrls.push(imageUrl);
+
+        // Enregistrer dans Supabase
+        await supabase.from('image_generations').insert([{
+          user_id: null,
+          vetements_names: vetementsLabels,
+          actions_names: actionsLabels,
+          poses_names: posesLabels,
+          accessoires_names: accessoiresLabels,
+          scenes_names: scenesLabels,
+          image_url: imageUrl,
+          image_count: imageCount,
+          description: textareaContent,
+          ai_model_id: character.id,
+          image_index: i,
+          batch_id: Date.now().toString(),
+        }]);
+
+        setGeneratedImages([...generatedImageUrls]);
+        setCurrentImageIndex(generatedImageUrls.length - 1);
+
+      } catch (err) {
+        if (generatedImageUrls.length === 0) {
+          throw err;
+        } else {
+          console.warn(`Échec pour l'image ${i + 1}, mais ${generatedImageUrls.length} images ont été générées`);
+        }
+      }
+    }
+
+    setGenerationProgress('');
+    if (generatedImageUrls.length === 0) {
+      throw new Error('Aucune image n\'a pu être générée');
+    }
+
+  } catch (err) {
+    setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
+  } finally {
+    setIsGenerating(false);
+  }
+};
+
+const handleNextImage = () => {
+  setCurrentImageIndex(prev => 
+    prev === generatedImages.length - 1 ? 0 : prev + 1
+  );
+};
+
+const handlePrevImage = () => {
+  setCurrentImageIndex(prev =>
+    prev === 0 ? generatedImages.length - 1 : prev - 1
+  );
+};
+
+// Génération de vidéo (processus en deux étapes : image -> vidéo)
+const handleGenerateVideo = async () => {
+  if (!character) return;
+
+  setIsGenerating(true);
+  setGenerationError(null);
+  setGeneratedVideoUrl(null);
+  setGeneratedImages([]);
+
+  try {
     const customPrompt = buildFullPrompt();
 
-    const response = await fetch('/api/aliveai/generate-character', {
+    // Construire les paramètres du personnage avec ses vraies caractéristiques
+    const characterParams = {
+      name: character.name,
+      gender: character.gender || 'femmes', // Valeurs attendues: 'femmes' ou 'hommes'
+      age: character.age || 25,
+      ethnicities: character.ethnicities?.length ? character.ethnicities : ['Occidental'],
+      hairType: character.hair_type || 'straight',
+      hairColor: character.hair_color || 'brown',
+      eyeColor: character.eye_color || 'brown',
+      bodyType: character.body_type || 'slim',
+      chestSize: character.chest_size || 'medium',
+      personality: character.personality || '',
+      customPrompt: customPrompt,
+    };
+
+    console.log('[Video Generation] Paramètres du personnage:', characterParams);
+
+    // Étape 1: Générer une image d'abord
+    setGenerationProgress('Étape 1/2 : Génération de l\'image source...');
+
+    const imageResponse = await fetch('/api/aliveai/generate-character', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: character.name,
-        gender: character.gender || 'femmes',
-        age: character.age || 25,
-        ethnicities: character.ethnicities || ['Occidental'],
-        hairType: character.hair_type || 'straight',
-        hairColor: character.hair_color || 'brown',
-        eyeColor: character.eye_color || 'brown',
-        bodyType: character.body_type || 'slim',
-        chestSize: character.chest_size || 'medium',
-        personality: character.personality,
-        customPrompt: customPrompt,
-      }),
+      body: JSON.stringify(characterParams),
     });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Erreur de génération');
+    const imageData = await imageResponse.json();
+    if (!imageResponse.ok) throw new Error(imageData.error || 'Erreur de génération d\'image');
 
-    const { promptId } = data;
+    const imagePromptId = imageData.promptId;
 
+    // Polling pour récupérer l'image et son mediaId
+    let imageUrl: string | null = null;
+    let mediaId: string | null = null;
     let attempts = 0;
     const maxAttempts = 60;
+
     while (attempts < maxAttempts) {
       await new Promise(r => setTimeout(r, 5000));
-      const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${promptId}`);
+      setGenerationProgress(`Étape 1/2 : Génération de l'image source... (${Math.min(Math.round((attempts / maxAttempts) * 100), 99)}%)`);
+
+      const statusRes = await fetch(`/api/aliveai/generate-character?promptId=${imagePromptId}`);
       const statusData = await statusRes.json();
 
-      if (statusData.status === 'completed' && statusData.imageUrl) {
-        return statusData.imageUrl;
+      console.log('[Video Gen] Image status:', statusData);
+
+      if ((statusData.isComplete || statusData.status === 'completed') && statusData.imageUrl) {
+        imageUrl = statusData.imageUrl;
+        mediaId = statusData.mediaId;
+        break;
       } else if (statusData.status === 'failed') {
-        throw new Error('La génération a échoué');
+        throw new Error('La génération de l\'image source a échoué');
       }
+
       attempts++;
     }
 
-    throw new Error('Timeout: la génération a pris trop de temps');
-  };
-
-  const handleGenerate = async () => {
-    if (!character) return;
-
-    setIsGenerating(true);
-    setGenerationError(null);
-    setGeneratedImages([]);
-    setCurrentImageIndex(0);
-
-    try {
-      const vetementsLabels = selectedVetements.map(id => vetementsImages.find(img => img.id === id)?.label || '');
-      const actionsLabels = selectedActions.map(id => actionsImages.find(img => img.id === id)?.label || '');
-      const posesLabels = selectedPoses.map(id => posesImages.find(img => img.id === id)?.label || '');
-      const accessoiresLabels = selectedAccessoires.map(id => accessoiresImages.find(img => img.id === id)?.label || '');
-      const scenesLabels = selectedScenes.map(id => scenesImages.find(img => img.id === id)?.label || '');
-
-      const generatedImageUrls: string[] = [];
-
-      for (let i = 0; i < imageCount; i++) {
-        setGenerationProgress(`Génération de l'image ${i + 1}/${imageCount}...`);
-        
-        try {
-          const imageUrl = await generateSingleImage();
-          generatedImageUrls.push(imageUrl);
-          
-          await supabase.from('image_generations').insert([{
-            user_id: null,
-            vetements_names: vetementsLabels,
-            actions_names: actionsLabels,
-            poses_names: posesLabels,
-            accessoires_names: accessoiresLabels,
-            scenes_names: scenesLabels,
-            image_url: imageUrl,
-            image_count: imageCount,
-            description: textareaContent,
-            ai_model_id: character.id,
-            image_index: i,
-            batch_id: Date.now().toString(),
-          }]);
-          
-          setGeneratedImages([...generatedImageUrls]);
-          
-        } catch (err) {
-          if (generatedImageUrls.length === 0) {
-            throw err;
-          } else {
-            console.warn(`Échec pour l'image ${i + 1}, mais ${generatedImageUrls.length} images ont été générées`);
-          }
-        }
-      }
-
-      setGenerationProgress('');
-      if (generatedImageUrls.length === 0) {
-        throw new Error('Aucune image n\'a pu être générée');
-      }
-
-    } catch (err) {
-      setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
-    } finally {
-      setIsGenerating(false);
+    if (!imageUrl || !mediaId) {
+      throw new Error('Impossible de générer l\'image source pour la vidéo');
     }
-  };
 
-  const handleNextImage = () => {
-    setCurrentImageIndex(prev => 
-      prev === generatedImages.length - 1 ? 0 : prev + 1
-    );
-  };
+    setLastGeneratedMediaId(mediaId);
+    setGeneratedImages([imageUrl]); // Afficher l'image source
 
-  const handlePrevImage = () => {
-    setCurrentImageIndex(prev => 
-      prev === 0 ? generatedImages.length - 1 : prev - 1
-    );
-  };
+    // Étape 2: Convertir l'image en vidéo
+    setGenerationProgress('Étape 2/2 : Conversion en vidéo...');
+
+    const videoText = customPrompt || 'Animation naturelle, mouvement doux';
+
+    const videoResponse = await fetch('/api/aliveai/generate-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mediaId: mediaId,
+        text: videoText.substring(0, 300), // Max 300 caractères
+        videoLength: 'SHORT',
+        videoFrameRate: 'MEDIUM',
+      }),
+    });
+
+    const videoData = await videoResponse.json();
+    if (!videoResponse.ok) throw new Error(videoData.error || 'Erreur de génération de vidéo');
+
+    const videoPromptId = videoData.promptId;
+
+    // Polling pour récupérer la vidéo
+    let videoAttempts = 0;
+    const maxVideoAttempts = 120; // Vidéos prennent plus de temps
+
+    while (videoAttempts < maxVideoAttempts) {
+      await new Promise(r => setTimeout(r, 5000));
+      setGenerationProgress(`Étape 2/2 : Conversion en vidéo... (${Math.min(Math.round((videoAttempts / maxVideoAttempts) * 100), 99)}%)`);
+
+      const videoStatusRes = await fetch(`/api/aliveai/generate-video?promptId=${videoPromptId}`);
+      const videoStatusData = await videoStatusRes.json();
+
+      console.log('[Video Gen] Video status:', videoStatusData);
+
+      if (videoStatusData.status === 'completed' && videoStatusData.videoUrl) {
+        setGeneratedVideoUrl(videoStatusData.videoUrl);
+        setGenerationProgress('');
+
+        // Enregistrer dans Supabase
+        const { error: saveError } = await supabase.from('video_generations').insert([{
+          user_id: null,
+          video_url: videoStatusData.videoUrl,
+          source_image_url: imageUrl,
+          description: customPrompt,
+          ai_model_id: character.id,
+        }]);
+        if (saveError) console.warn('Erreur sauvegarde vidéo:', saveError);
+
+        setIsGenerating(false);
+        return;
+      } else if (videoStatusData.status === 'failed') {
+        throw new Error(videoStatusData.error || 'La génération de la vidéo a échoué');
+      }
+
+      videoAttempts++;
+    }
+
+    throw new Error('Timeout: la génération de vidéo a pris trop de temps');
+
+  } catch (err) {
+    console.error('[Video Gen] Error:', err);
+    setGenerationError(err instanceof Error ? err.message : 'Une erreur est survenue');
+  } finally {
+    setIsGenerating(false);
+    setGenerationProgress('');
+  }
+};
 
   if (loadingCharacter) {
     return (
@@ -354,58 +515,83 @@ function GenerationSlugContent({ slug }: { slug: string }) {
             )}
           </div>
 
-          {/* Zone d'affichage des images générées */}
-          {hasGeneratedImages && currentImageUrl && (
-            <div className="w-1/3 flex flex-col items-start">
-              <h3 className="text-white text-xl font-bold mb-2">
-                Images Générées ({generatedImages.length})
-              </h3>
-              
-              <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
-                <Image 
-                  src={currentImageUrl} 
-                  alt={`Image générée ${currentImageIndex + 1}`} 
-                  fill 
-                  className="object-cover rounded-3xl" 
-                />
-                
-                {/* Navigation entre images si plus d'une */}
-                {generatedImages.length > 1 && (
-                  <>
-                    <div className="absolute inset-0 flex items-center justify-between p-4">
-                      <button 
-                        onClick={handlePrevImage}
-                        className="rounded-full p-2 hover: transition-colors z-20"
-                      >
-                        <Image src="/icons/back_arrow_ios.png" alt="Précédent" width={24} height={24} />
-                      </button>
-                      <button 
-                        onClick={handleNextImage}
-                        className="rounded-full p-2 hover: transition-colors z-20"
-                      > 
-                        <Image src="/icons/arrow-right.png" alt="Suivant" width={33} height={33} />
-                      </button>
-                    </div> 
-                    
-                    {/* Indicateur de position */}
-                    <div className="absolute bottom-4 right-4 bg-black/50 rounded-full px-3 py-1 z-20">
-                      <span className="text-white text-sm">
-                        {currentImageIndex + 1}/{generatedImages.length}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-              
-              {/* Miniatures */}
-             
-          
-              
-              <p className="text-gray-400 text-sm mt-2">Cliquez pour télécharger ou partager</p>
-            </div>
-          )}
-        </div>
+         {/* Zone d'affichage des images générées */}
+{hasGeneratedImages && currentImageUrl && !generatedVideoUrl && (
+  <div className="w-1/3 flex flex-col items-start">
+    <h3 className="text-white text-xl font-bold mb-2">
+      {mode === 'video'
+        ? 'Image Source (en cours de conversion...)'
+        : generatedImages.length === 1
+          ? 'Image Générée'
+          : `Images Générées (${generatedImages.length})`
+      }
+    </h3>
 
+    <div className="rounded-3xl overflow-hidden relative" style={{ width: 240, height: 290 }}>
+      {/* Utilisation de <img> au lieu de next/image */}
+      <img
+        src={currentImageUrl}
+        alt={`Image générée ${currentImageIndex + 1}`}
+        className="object-cover rounded-3xl w-full h-full"
+      />
+
+      {/* Navigation entre images si plus d'une */}
+      {generatedImages.length > 1 && (
+        <>
+          <div className="absolute inset-0 flex items-center justify-between p-4">
+            <button
+              onClick={handlePrevImage}
+              className="rounded-full p-2 hover: transition-colors z-20"
+            >
+              <img src="/icons/back_arrow_ios.png" alt="Précédent" width={24} height={24} />
+            </button>
+            <button
+              onClick={handleNextImage}
+              className="rounded-full p-2 hover: transition-colors z-20"
+            >
+              <img src="/icons/arrow-right.png" alt="Suivant" width={33} height={33} />
+            </button>
+          </div>
+
+          {/* Indicateur de position */}
+          <div className="absolute bottom-4 right-4 bg-black/50 rounded-full px-3 py-1 z-20">
+            <span className="text-white text-sm">
+              {currentImageIndex + 1}/{generatedImages.length}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+
+    {/* Miniatures */}
+    <div className="flex gap-2 mt-4">
+      {generatedImages.slice(0, 4).map((img, index) => (
+        <button
+          key={index}
+          onClick={() => setCurrentImageIndex(index)}
+          className={`rounded-lg overflow-hidden ${
+            index === currentImageIndex ? 'ring-2 ring-red-500' : 'opacity-70 hover:opacity-100'
+          }`}
+        >
+          <img
+            src={img}
+            alt={`Miniature ${index + 1}`}
+            className="object-cover w-[50px] h-[50px]"
+          />
+        </button>
+      ))}
+      {generatedImages.length > 4 && (
+        <div className="flex items-center justify-center w-[50px] h-[50px] bg-gray-800 rounded-lg">
+          <span className="text-gray-400 text-sm">+{generatedImages.length - 4}</span>
+        </div>
+      )}
+    </div>
+
+    <p className="text-gray-400 text-sm mt-2">Cliquez pour télécharger ou partager</p>
+  </div>
+)}
+
+</div>
         {/* Category links (masqué après génération) */}
         {!hasGeneratedImages && (
           <>
@@ -453,33 +639,73 @@ function GenerationSlugContent({ slug }: { slug: string }) {
           </>
         )}
 
+      {/* Zone d'affichage de la vidéo générée */}
+{generatedVideoUrl && (
+  <div className="flex justify-end -mt-119 mb-10 ">
+    <div className="flex flex-col items-end">
+   <h3 className="text-white text-xl font-bold mb-8 ml-5 self-start">Vidéo Générée</h3>
+
+      <div className="rounded-3xl overflow-hidden relative" style={{ maxWidth: 300 }}>
+        <video
+          src={generatedVideoUrl}
+          controls
+          autoPlay
+          loop
+          className="w-full  ml-4 rounded-3xl"
+        />
+      </div>
+      <div className="flex gap-4 mt-4">
+        <a
+          href={generatedVideoUrl}
+          download
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+        >
+          <span>Télécharger</span>
+        </a>
+        <button
+          onClick={() => {
+            setGeneratedVideoUrl(null);
+            setGeneratedImages([]);
+          }}
+          className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          Nouvelle génération
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
         {/* Generate button */}
         <div className="flex justify-center mb-10">
-          {hasGeneratedImages ? (
-            <div className="flex gap-4">
-              <button 
-                onClick={() => {
-                  setGeneratedImages([]);
-                  setCurrentImageIndex(0);
-                }}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
-              >
-                Générer de nouvelles images
-              </button>
-              {/* <button 
-                onClick={() => handleGenerate()}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition-colors"
-              >
-                Générer à nouveau
-              </button> */}
-            </div>
+          {(hasGeneratedImages || generatedVideoUrl) ? (
+            !generatedVideoUrl && (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setGeneratedImages([]);
+                    setGeneratedVideoUrl(null);
+                    setCurrentImageIndex(0);
+                  }}
+                  className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-colors"
+                >
+                  {mode === 'video' ? 'Générer une nouvelle vidéo' : 'Générer de nouvelles images'}
+                </button>
+              </div>
+            )
           ) : (
             <button
-              onClick={handleGenerate}
+              onClick={mode === 'video' ? handleGenerateVideo : handleGenerate}
               disabled={isGenerating}
               className={`px-8 py-3 rounded-xl font-bold text-lg transition ${isGenerating ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
             >
-              {isGenerating ? 'Génération en cours...' : `Générer ${imageCount} Image${imageCount > 1 ? 's' : ''}`}
+              {isGenerating
+                ? 'Génération en cours...'
+                : mode === 'video'
+                  ? 'Générer une vidéo'
+                  : `Générer ${imageCount} Image${imageCount > 1 ? 's' : ''}`
+              }
             </button>
           )}
         </div>

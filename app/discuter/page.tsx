@@ -779,7 +779,7 @@ function DiscuterPageContent() {
                   </div>
                   <Image
                     // swapped mapping: when sidebar is collapsed (mini) show vector.png, when expanded show vector-close.png
-                    src={isSidebarCollapsed ? "/images/vector.png" : "/images/vector-close.png"}
+                    src={isSidebarCollapsed ? "/images/Vector.png" : "/images/vector-close.png"}
                     alt="Toggle Sidebar"
                     width={26}
                     height={24}

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
+import AIImage from '../components/AIImage';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -177,7 +178,7 @@ export default function MesIA() {
             <Link href={`/discuter?modelId=${model.id}`} key={model.id} className="block">
               <div className="relative w-64 h-72 bg-gray-800 rounded-2xl overflow-hidden shadow-2xl cursor-pointer hover:ring-2 hover:ring-red-500 transition-all">
                 {model.avatar_url ? (
-                  <Image
+                  <AIImage
                     src={model.avatar_url}
                     alt={model.name}
                     fill

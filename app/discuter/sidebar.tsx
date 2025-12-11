@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import AIImage from '../components/AIImage';
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -166,7 +167,7 @@ export const LargeImagePlaceholder = ({
             {/* First and second images */}
             {(currentImageIndex === 0 || currentImageIndex === 1) && currentImage.src && (
               <>
-                <Image
+                <AIImage
                   src={currentImage.src}
                   alt={currentImage.alt}
                   fill

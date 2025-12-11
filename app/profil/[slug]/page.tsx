@@ -1,6 +1,7 @@
 'use client';
 
 import Image from "next/image";
+import AIImage from "../../components/AIImage";
 import { useState, useEffect, use } from "react";
 import Sidebar from "../../components/Sidebar";
 import ProfileNav from "../../components/ProfileNav";
@@ -138,7 +139,7 @@ function CharacterProfileContent({ slug }: { slug: string }) {
                     </div>
                     <div className="absolute bottom-0 left-0 w-full h-2/5 bg-gradient-to-t from-black via-black/90 to-transparent rounded-b-xl" />
                     <div className="absolute bottom-19 left-6 w-32 h-32 rounded-full overflow-hidden">
-                        <Image src={character.avatar_url || '/images/A.jpg'} alt={character.name} width={159} height={150} className="object-cover" />
+                        <AIImage src={character.avatar_url || '/images/A.jpg'} alt={character.name} width={159} height={150} className="object-cover" />
                     </div>
                     <div className="absolute bottom-24 left-48 z-10">
                         <h2 className="text-2xl font-bold">{character.name}</h2>
