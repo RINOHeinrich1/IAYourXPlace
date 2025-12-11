@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import AIImage from '../components/AIImage';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
@@ -176,7 +177,7 @@ export default function CollectionPage() {
           {collectionItems.map((item) => (
             <div key={item.id} className="space-y-4">
               <div className="flex items-center space-x-2">
-                <Image
+                <AIImage
                   src={item.thumb}
                   alt={item.name}
                   width={66}
@@ -229,7 +230,7 @@ export default function CollectionPage() {
                   href={item.modelId ? `/video/${item.modelId}` : `/video`}
                   className="block relative w-full h-full"
                 >
-                  <Image
+                  <AIImage
                     src={item.large}
                     alt={`${item.name} Grande image`}
                     fill

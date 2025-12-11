@@ -32,10 +32,17 @@ const nextConfig: NextConfig = {
                 port: '',
                 pathname: '/**',
             },
-            // 5. AliveAI CDN - for AI-generated character images
+            // 5. AliveAI CDN/Files - for AI-generated character images (AWS S3 signed URLs)
             {
                 protocol: 'https',
-                hostname: '*.aliveai.app',
+                hostname: 'files.aliveai.app',
+                port: '',
+                pathname: '/**',
+            },
+            // 6. AliveAI CDN alternate domain (if any)
+            {
+                protocol: 'https',
+                hostname: 'cdn.aliveai.app',
                 port: '',
                 pathname: '/**',
             },
