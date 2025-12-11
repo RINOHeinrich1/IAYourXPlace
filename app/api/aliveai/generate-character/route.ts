@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
 import {
   createPrompt,
   getPrompt,
@@ -9,25 +8,13 @@ import {
   CreatePromptRequest,
 } from '@/lib/services/aliveai';
 
-/**
- * POST /api/aliveai/generate-character
- * 
- * Generate an AI character image using the AliveAI API.
- * This endpoint creates a prompt and returns the promptId for tracking.
- * The client can then poll for completion or use WebSocket for real-time updates.
- */
+/* =========================================================
+   POST → Lancer la génération AliveAI
+========================================================= */
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate user
-    const supabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
-
-    // Parse request body
     const body = await request.json();
+
     const {
       name,
       gender,
@@ -39,100 +26,92 @@ export async function POST(request: NextRequest) {
       bodyType,
       chestSize,
       personality,
-      customPrompt, // New: user's custom prompt for the image
+      customPrompt,
     } = body;
 
-    // Validate required fields
     if (!name || !gender || !age || !ethnicities?.length) {
+      console.log('[AliveAI] Champs manquants:', { name, gender, age, ethnicities });
       return NextResponse.json(
-        { error: 'Champs requis manquants: name, gender, age, ethnicities' },
+        { error: 'Champs requis manquants' },
         { status: 400 }
       );
     }
 
-    // Build appearance description with custom prompt included
-    const fullAppearance = buildAppearanceDescription({
+    // Log des caractéristiques du personnage reçues
+    console.log('[AliveAI] Caractéristiques du personnage:', {
+      name,
       gender,
-      age: Number(age),
-      ethnicities: Array.isArray(ethnicities) ? ethnicities : [ethnicities],
-      hairType: hairType || 'straight',
-      hairColor: hairColor || 'brown',
-      eyeColor: eyeColor || 'brown',
-      bodyType: bodyType || 'slim',
-      chestSize: chestSize || 'medium',
-      customPrompt: customPrompt, // Include custom prompt in appearance
+      age,
+      ethnicities,
+      hairType,
+      hairColor,
+      eyeColor,
+      bodyType,
+      chestSize,
+      personality,
+      customPrompt: customPrompt?.substring(0, 100) + (customPrompt?.length > 100 ? '...' : ''),
     });
 
-    // Add personality expression if provided
-    let appearanceWithPersonality = fullAppearance;
-    if (personality) {
-      const personalityStr = Array.isArray(personality) ? personality.join(', ') : personality;
-      appearanceWithPersonality = fullAppearance.replace(
-        ', high quality, photorealistic',
-        `, ${personalityStr} expression, high quality, photorealistic`
-      );
-    }
+    // Construire le prompt visuel avec TOUTES les caractéristiques du personnage
+    const appearance = buildAppearanceDescription({
+      gender,
+      age: Number(age),
+      ethnicities,
+      hairType: hairType ?? 'straight',
+      hairColor: hairColor ?? 'black',
+      eyeColor: eyeColor ?? 'brown',
+      bodyType: bodyType ?? 'slim',
+      chestSize: chestSize ?? 'medium',
+      customPrompt,
+    });
 
-    console.log('[AliveAI] Full appearance prompt:', appearanceWithPersonality);
-    console.log('[AliveAI] Custom prompt received:', customPrompt);
+    console.log('[AliveAI] Description d\'apparence générée:', appearance);
 
-    // Create AliveAI prompt request
-    // Use custom prompt in BOTH appearance AND scene fields for maximum effect
+    const finalAppearance = personality
+      ? appearance.replace(
+          ', high quality, photorealistic',
+          `, ${personality} expression, high quality, photorealistic`
+        )
+      : appearance;
+
     const promptRequest: CreatePromptRequest = {
       name,
-      appearance: appearanceWithPersonality,
+      appearance: finalAppearance,
       detailLevel: 'HIGH',
       gender: mapGender(gender),
-      fromLocation: mapEthnicityToLocation(
-        Array.isArray(ethnicities) ? ethnicities : [ethnicities]
-      ),
+      fromLocation: mapEthnicityToLocation(ethnicities),
       faceImproveEnabled: true,
       faceModel: 'REALISM',
       model: 'REALISM',
       aspectRatio: 'PORTRAIT',
       blockExplicitContent: false,
-      // Set scene field with custom prompt for additional context
-      scene: customPrompt && customPrompt.trim() ? customPrompt.trim() : undefined,
+      scene: customPrompt?.trim() || undefined,
     };
 
-    console.log('[AliveAI] Full request:', JSON.stringify(promptRequest, null, 2));
+    console.log('[AliveAI] Prompt envoyé:', promptRequest);
 
-    // Create the prompt with AliveAI
-    const response = await createPrompt(promptRequest);
+    const result = await createPrompt(promptRequest);
 
     return NextResponse.json({
       success: true,
-      promptId: response.promptId,
-      seed: response.seed,
-      message: 'Génération d\'image en cours...',
+      promptId: result.promptId,
+      seed: result.seed,
     });
 
-  } catch (error) {
-    console.error('AliveAI generate-character error:', error);
+  } catch (error: any) {
+    console.error('[AliveAI POST ERROR]', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { error: error.message || 'Erreur serveur AliveAI' },
       { status: 500 }
     );
   }
 }
 
-/**
- * GET /api/aliveai/generate-character?promptId=xxx
- * 
- * Check the status of a character generation prompt.
- * Returns the generated image URL when complete.
- */
+/* =========================================================
+   GET → Vérifier l’état de la génération et retourner l’image
+========================================================= */
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
-    const supabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    }
-
-    // Get promptId from query params
     const { searchParams } = new URL(request.url);
     const promptId = searchParams.get('promptId');
 
@@ -143,38 +122,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get prompt status from AliveAI
     const result = await getPrompt(promptId);
 
-    // Check if we have media results
-    const imageMedia = result.medias?.find(m => m.mediaType === 'IMAGE');
+    const image = result.medias?.find(
+      (m) => m.mediaType === 'IMAGE' && m.mediaUrl
+    );
 
-    if (imageMedia) {
+    if (!image) {
       return NextResponse.json({
         success: true,
-        status: 'completed',
-        isComplete: true,
-        imageUrl: imageMedia.mediaUrl,
-        mediaId: imageMedia.id,
-        promptId: result.promptId,
+        isComplete: false,
+        status: 'processing',
       });
     }
 
-    // Still processing
     return NextResponse.json({
       success: true,
-      status: 'processing',
-      isComplete: false,
-      promptId: result.promptId,
-      message: 'Génération en cours...',
+      isComplete: true,
+      status: 'completed',
+      imageUrl: image.mediaUrl,
+      mediaId: image.id, // ID nécessaire pour la génération vidéo
+      promptId,
     });
 
-  } catch (error) {
-    console.error('AliveAI get-prompt error:', error);
+  } catch (error: any) {
+    console.error('[AliveAI GET ERROR]', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { error: error.message || 'Erreur récupération image' },
       { status: 500 }
     );
   }
 }
-
